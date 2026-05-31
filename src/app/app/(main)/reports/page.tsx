@@ -204,16 +204,10 @@ export default async function ReportsPage({
   periodEnd.setHours(0, 0, 0, 0);
 
   const supabase = await createClient();
-  const [{ data: salesData }, { data: itemsData }, { data: fixedExpensesData }] = await Promise.all([
+  const [{ data: salesData }, { data: fixedExpensesData }] = await Promise.all([
     supabase
       .from("sales")
       .select("id,total,status,created_at")
-      .eq("business_id", businessId)
-      .gte("created_at", periodStart.toISOString())
-      .lt("created_at", periodEnd.toISOString()),
-    supabase
-      .from("sale_items")
-      .select("sale_id,product_id,quantity,total,created_at")
       .eq("business_id", businessId)
       .gte("created_at", periodStart.toISOString())
       .lt("created_at", periodEnd.toISOString()),
@@ -227,8 +221,15 @@ export default async function ReportsPage({
 
   const sales = (salesData ?? []) as SaleRow[];
   const paidSales = sales.filter((s) => s.status === "paid");
-  const paidSaleIds = new Set(paidSales.map((s) => s.id));
-  const items = ((itemsData ?? []) as SaleItemRow[]).filter((i) => paidSaleIds.has(i.sale_id));
+  const paidSaleIds = paidSales.map((s) => s.id);
+  const { data: itemsData } = paidSaleIds.length
+    ? await supabase
+        .from("sale_items")
+        .select("sale_id,product_id,quantity,total,created_at")
+        .eq("business_id", businessId)
+        .in("sale_id", paidSaleIds)
+    : { data: [] };
+  const items = (itemsData ?? []) as SaleItemRow[];
   const fixedExpenses = (fixedExpensesData ?? []) as FixedExpenseRow[];
 
   const uniqueProductIds = Array.from(new Set(items.map((x) => x.product_id).filter(Boolean))) as string[];
