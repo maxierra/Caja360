@@ -1,5 +1,5 @@
 export const DESKTOP_DOWNLOAD_RELEASE_URL =
-  "https://github.com/maxierra/sistema-punto-venta-demo/releases/download/v1.0.0/POS_Flet_7dias.zip";
+  "https://github.com/maxierra/sistema-punto-venta-demo/releases/tag/v1.0.0";
 
 export const DESKTOP_DOWNLOAD_TRACKED_PATH = "/api/download/windows";
 

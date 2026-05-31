@@ -17,6 +17,7 @@ create table if not exists public.businesses (
   slug text not null unique,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
+  onboarding_completed_at timestamptz,
   report_daily_enabled boolean default false,
   report_daily_email text,
   report_daily_time time default '08:00:00'
@@ -108,15 +109,15 @@ create table if not exists public.subscriptions (
 
 create index if not exists subscriptions_status_idx on public.subscriptions(status);
 
--- Una sola fila (id = 1). Cambiá subscription_trial_interval para pruebas (ej. '5 minutes') o producción ('3 days').
+-- Una sola fila (id = 1). Cambiá subscription_trial_interval para pruebas (ej. '5 minutes') o producción ('7 days').
 create table if not exists public.platform_settings (
   id smallint primary key default 1 check (id = 1),
-  subscription_trial_interval interval not null default interval '3 days',
+  subscription_trial_interval interval not null default interval '7 days',
   updated_at timestamptz not null default now()
 );
 
 insert into public.platform_settings (id, subscription_trial_interval)
-values (1, interval '3 days')
+values (1, interval '7 days')
 on conflict (id) do nothing;
 
 create table if not exists public.payments (

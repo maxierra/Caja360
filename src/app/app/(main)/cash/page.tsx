@@ -3,7 +3,9 @@ import { cookies } from "next/headers";
 
 import { CashPageClient } from "@/app/app/(main)/cash/cash-page-client";
 import { CashFilter } from "@/app/app/(main)/cash/cash-filter";
+import { parseOnboardingGuideStep } from "@/app/app/(main)/onboarding/onboarding-guide-constants";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { isMissingOnboardingColumnError } from "@/lib/onboarding-column";
 import { createClient } from "@/lib/supabase/server";
 import { effectiveSalePaymentMethod } from "@/lib/sale-payment-method-display";
 
@@ -27,6 +29,7 @@ type SaleRow = {
   payment_details?: unknown;
   status: string;
   created_at: string;
+  cash_register_id?: string | null;
 };
 
 type CashMovementRow = {
@@ -37,6 +40,7 @@ type CashMovementRow = {
   reason: string;
   notes: string | null;
   created_at: string;
+  cash_register_id?: string | null;
 };
 
 type MethodTotals = {
@@ -52,6 +56,7 @@ type CustomerPaymentRow = {
   payment_method: string;
   created_at: string;
   notes: string | null;
+  cash_register_id?: string | null;
 };
 
 function toNum(value: number | string | null | undefined) {
@@ -72,6 +77,23 @@ function formatArDateTime(iso: string) {
     second: "2-digit",
     hour12: false,
   }).format(d);
+}
+
+function arDateRangeUtcIso(filterDate?: string) {
+  const now = new Date();
+  const ymd =
+    filterDate && /^\d{4}-\d{2}-\d{2}$/.test(filterDate)
+      ? filterDate
+      : new Intl.DateTimeFormat("en-CA", {
+          timeZone: "America/Argentina/Buenos_Aires",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(now);
+  return {
+    startIso: `${ymd}T00:00:00-03:00`,
+    endIso: `${ymd}T23:59:59.999-03:00`,
+  };
 }
 
 function expandSaleTotalsByMethod(sales: SaleRow[]) {
@@ -175,7 +197,7 @@ function splitFromDetails(details: unknown) {
     .filter((x) => x.method && x.amount > 0);
 }
 
-export default async function CashPage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
+export default async function CashPage({ searchParams }: { searchParams: Promise<{ date?: string; ob?: string }> }) {
   const params = await searchParams;
   const filterDate = params.date;
   const cookieStore = await cookies();
@@ -212,14 +234,7 @@ export default async function CashPage({ searchParams }: { searchParams: Promise
 
   const openRegister = (openData as CashRegisterRow | null) ?? null;
 
-  const todayStart = new Date();
-  if (filterDate) {
-    const [y, m, d] = filterDate.split("-").map(Number);
-    todayStart.setFullYear(y, m - 1, d);
-  }
-  todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date(todayStart);
-  todayEnd.setDate(todayEnd.getDate() + 1);
+  const { startIso: dayStartIso, endIso: dayEndIso } = arDateRangeUtcIso(filterDate);
 
   let sales: SaleRow[] = [];
   let movements: CashMovementRow[] = [];
@@ -230,34 +245,44 @@ export default async function CashPage({ searchParams }: { searchParams: Promise
   const [{ data: salesData }, { data: movementsData }, { data: capData }] = await Promise.all([
     supabase
       .from("sales")
-      .select("id,total,payment_method,payment_details,status,created_at")
+      .select("id,total,payment_method,payment_details,status,created_at,cash_register_id")
       .eq("business_id", businessId)
-      .gte("created_at", todayStart.toISOString())
-      .lt("created_at", todayEnd.toISOString())
+      .gte("created_at", dayStartIso)
+      .lte("created_at", dayEndIso)
       .order("created_at", { ascending: false }),
     supabase
       .from("cash_movements")
-      .select("id,movement_type,payment_method,amount,reason,notes,created_at")
+      .select("id,movement_type,payment_method,amount,reason,notes,created_at,cash_register_id")
       .eq("business_id", businessId)
-      .gte("created_at", todayStart.toISOString())
-      .lt("created_at", todayEnd.toISOString())
+      .gte("created_at", dayStartIso)
+      .lte("created_at", dayEndIso)
       .order("created_at", { ascending: false }),
     supabase
       .from("customer_account_payments")
-      .select("id,amount,payment_method,created_at,notes")
+      .select("id,amount,payment_method,created_at,notes,cash_register_id")
       .eq("business_id", businessId)
-      .gte("created_at", todayStart.toISOString())
-      .lt("created_at", todayEnd.toISOString())
+      .gte("created_at", dayStartIso)
+      .lte("created_at", dayEndIso)
       .order("created_at", { ascending: false }),
   ]);
   sales = (salesData ?? []) as SaleRow[];
   movements = (movementsData ?? []) as CashMovementRow[];
   customerPayments = (capData ?? []) as CustomerPaymentRow[];
 
-  const [{ data: businessData }, { data: turnsData }] = await Promise.all([
+  const turnSales = openRegister
+    ? sales.filter((s: any) => String((s as any).cash_register_id ?? "") === openRegister.id)
+    : sales;
+  const turnMovements = openRegister
+    ? movements.filter((m: any) => String((m as any).cash_register_id ?? "") === openRegister.id)
+    : movements;
+  const turnCustomerPayments = openRegister
+    ? customerPayments.filter((p: any) => String((p as any).cash_register_id ?? "") === openRegister.id)
+    : customerPayments;
+
+  const [{ data: businessData, error: businessError }, { data: turnsData }] = await Promise.all([
     supabase
       .from("businesses")
-      .select("name,address,phone,cuit,ticket_header,ticket_footer")
+      .select("name,address,phone,cuit,ticket_header,ticket_footer,onboarding_completed_at")
       .eq("id", businessId)
       .single(),
     supabase
@@ -269,12 +294,16 @@ export default async function CashPage({ searchParams }: { searchParams: Promise
   ]);
 
   const business = (businessData as any) ?? null;
+  const onboardingIncomplete = isMissingOnboardingColumnError(businessError)
+    ? false
+    : !(businessData as { onboarding_completed_at?: string | null } | null)?.onboarding_completed_at;
+  const guideCashStep = onboardingIncomplete && parseOnboardingGuideStep(params.ob) === "cash";
   const turns = (turnsData ?? []) as CashRegisterRow[];
 
-  const soldByMethod = expandSaleTotalsByMethod(sales);
-  const movementNetByMethod = movementTotalsByMethod(movements);
-  const cobrosCuentaByMethod = customerPaymentTotalsByMethod(customerPayments);
-  const pendienteCuentaCorriente = sumCuentaCorrienteSales(sales);
+  const soldByMethod = expandSaleTotalsByMethod(turnSales);
+  const movementNetByMethod = movementTotalsByMethod(turnMovements);
+  const cobrosCuentaByMethod = customerPaymentTotalsByMethod(turnCustomerPayments);
+  const pendienteCuentaCorriente = sumCuentaCorrienteSales(turnSales);
   const openingAmount = toNum(openRegister?.opening_amount);
   const soldTotal = soldByMethod.cash + soldByMethod.card + soldByMethod.transfer + soldByMethod.mercadopago;
 
@@ -590,6 +619,7 @@ export default async function CashPage({ searchParams }: { searchParams: Promise
       ledgerRows={ledgerRows as any}
       historyTurns={historyTurns}
       business={business}
+      guideCashStep={guideCashStep}
     />
     </div>
   );

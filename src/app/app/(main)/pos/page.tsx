@@ -3,16 +3,23 @@ import { cookies } from "next/headers";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { BusinessPaymentMethodRow } from "@/lib/business-payment-methods";
+import { isMissingOnboardingColumnError } from "@/lib/onboarding-column";
 import { createClient } from "@/lib/supabase/server";
 
 import { PosClient, type PosCustomerCredit, type PosProduct } from "@/app/app/(main)/pos/pos-client";
+import { parseOnboardingGuideStep } from "@/app/app/(main)/onboarding/onboarding-guide-constants";
 
 function toNum(v: unknown) {
   const n = typeof v === "number" ? v : Number(v ?? 0);
   return Number.isFinite(n) ? n : 0;
 }
 
-export default async function PosPage() {
+export default async function PosPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ ob?: string }>;
+}) {
+  const sp = await searchParams;
   const cookieStore = await cookies();
   const businessId = cookieStore.get("active_business_id")?.value;
 
@@ -35,9 +42,9 @@ export default async function PosPage() {
   }
 
   const supabase = await createClient();
-  const { data: businessData } = await supabase
+  const { data: businessData, error: businessError } = await supabase
     .from("businesses")
-    .select("name,address,phone,cuit,ticket_header,ticket_footer")
+    .select("name,address,phone,cuit,ticket_header,ticket_footer,onboarding_completed_at")
     .eq("id", businessId)
     .single();
 
@@ -141,6 +148,11 @@ export default async function PosPage() {
   });
   const mercadoPagoQrReady = !mpRpcErr && mpQrReady === true;
 
+  const onboardingIncomplete = isMissingOnboardingColumnError(businessError)
+    ? false
+    : !(businessData as { onboarding_completed_at?: string | null } | null)?.onboarding_completed_at;
+  const guidePosStep = onboardingIncomplete && parseOnboardingGuideStep(sp.ob) === "pos";
+
   return (
     <PosClient
       products={products}
@@ -149,6 +161,7 @@ export default async function PosPage() {
       paymentMethodConfig={paymentMethodConfig}
       posCustomers={posCustomers}
       mercadoPagoQrReady={mercadoPagoQrReady}
+      guidePosStep={guidePosStep}
     />
   );
 }

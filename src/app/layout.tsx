@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Playfair_Display } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import { Providers } from "@/app/providers";
+import { SupportFloatingButton } from "@/components/support-floating-button";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -42,6 +43,7 @@ export default function RootLayout({
           {`(function(){try{var t=localStorage.getItem('theme');var r=document.documentElement;r.classList.remove('dark','light');r.classList.add(t==='light'?'light':'dark');}catch(e){document.documentElement.classList.add('dark');}})();`}
         </Script>
         <Providers>{children}</Providers>
+        <SupportFloatingButton />
       </body>
     </html>
   );

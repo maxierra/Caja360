@@ -43,7 +43,7 @@ async function createBusinessImpl(formData: FormData) {
       sameSite: "lax",
       path: "/",
     });
-    redirect("/app");
+    redirect("/app/products?ob=product");
   }
 
   const supabase = await createClient();
@@ -94,7 +94,7 @@ async function createBusinessImpl(formData: FormData) {
     });
   }
 
-  redirect("/app");
+  redirect("/app/products?ob=product");
 }
 
 export const createBusiness = createMonitoredAction(createBusinessImpl, "setup/createBusiness");

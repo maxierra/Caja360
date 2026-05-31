@@ -1,4 +1,5 @@
-import { loadAdminDownloadStats, loadAdminSubscriptionList } from "@/app/admin/(dashboard)/data";
+import { AdminConversionDashboardView } from "@/app/admin/(dashboard)/admin-conversion-dashboard";
+import { loadAdminConversionDashboard, loadAdminDownloadStats, loadAdminSubscriptionList } from "@/app/admin/(dashboard)/data";
 import { AdminSubscriptionsOverview } from "@/app/admin/(dashboard)/subscriptions-overview";
 import { AdminWithMonitoring } from "@/components/admin-with-monitoring";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,7 +16,12 @@ function billingDaysFromEnv(): number {
   return Number.isFinite(d) && d > 0 ? Math.floor(d) : 30;
 }
 
-export default async function AdminPage() {
+export default async function AdminPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ month?: string }>;
+}) {
+  const sp = (await searchParams) ?? {};
   const supabase = await createClient();
   const {
     data: { user },
@@ -43,16 +49,17 @@ export default async function AdminPage() {
           </CardHeader>
         </Card>
       ) : (
-        <AdminAdminBody billingDays={billingDays} />
+        <AdminAdminBody billingDays={billingDays} month={sp.month} />
       )}
     </div>
   );
 }
 
-async function AdminAdminBody({ billingDays }: { billingDays: number }) {
-  const [loaded, downloadStatsLoaded] = await Promise.all([
+async function AdminAdminBody({ billingDays, month }: { billingDays: number; month?: string }) {
+  const [loaded, downloadStatsLoaded, conversionLoaded] = await Promise.all([
     loadAdminSubscriptionList(),
     loadAdminDownloadStats(),
+    loadAdminConversionDashboard(month),
   ]);
 
   if (!loaded.ok) {
@@ -84,6 +91,19 @@ async function AdminAdminBody({ billingDays }: { billingDays: number }) {
           </CardHeader>
         </Card>
       ) : null}
+
+      {!conversionLoaded.ok && conversionLoaded.error !== "forbidden" ? (
+        <Card className="border-amber-400/40">
+          <CardHeader>
+            <CardTitle>Métricas de conversión no disponibles</CardTitle>
+            <CardDescription>
+              {conversionLoaded.message ?? "No se pudieron cargar los indicadores de registros/uso."}
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      ) : null}
+
+      {conversionLoaded.ok ? <AdminConversionDashboardView data={conversionLoaded.data} /> : null}
 
       <AdminSubscriptionsOverview rows={loaded.rows} billingDays={billingDays} downloadStats={downloadStats} />
     </>

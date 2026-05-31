@@ -1,15 +1,23 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { Resend } from "resend";
 import { DailyReportEmail } from "@/components/emails/daily-report-email";
+
+type SplitPaymentDetail = {
+  method?: string;
+  amount?: number | string;
+};
+
+function splitPaymentDetails(value: unknown): SplitPaymentDetail[] {
+  if (!value || typeof value !== "object") return [];
+  const split = (value as { split?: unknown }).split;
+  return Array.isArray(split) ? split : [];
+}
 
 // Usamos el cliente con rol de servicio para evitar políticas RLS, ya que no hay un usuario logueado en un cron
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
   process.env.SUPABASE_SERVICE_ROLE_KEY || ""
 );
-
-const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function GET(request: Request) {
   try {
@@ -20,6 +28,14 @@ export async function GET(request: Request) {
     if (process.env.NODE_ENV === "production" && cronSecret && authHeader !== `Bearer ${cronSecret}`) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
+
+    const resendApiKey = (process.env.RESEND_API_KEY ?? "").trim();
+    if (!resendApiKey) {
+      return NextResponse.json({ error: "RESEND_API_KEY no configurada" }, { status: 500 });
+    }
+
+    const { Resend } = await import("resend");
+    const resend = new Resend(resendApiKey);
 
     // Calcular las fechas: hoy a las 00:00 y mañana a las 00:00
     const now = new Date();
@@ -70,8 +86,7 @@ export async function GET(request: Request) {
         
         // Manejar split payments o directo
         if (sale.payment_method === "mixed" && typeof sale.payment_details === "object" && sale.payment_details !== null) {
-          const details: any = sale.payment_details;
-          for (const item of details?.split || []) {
+          for (const item of splitPaymentDetails(sale.payment_details)) {
             if (item.method === "cash") cashTotal += Number(item.amount);
             if (item.method === "card") cardTotal += Number(item.amount);
             if (item.method === "transfer") transferTotal += Number(item.amount);
@@ -137,8 +152,9 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ success: true, message: `Reportes enviados: ${sentCount}` });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Cron Job Error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Error desconocido";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

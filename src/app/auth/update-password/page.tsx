@@ -11,6 +11,7 @@ import {
   AuthTextLink,
   authAlertError,
   authInputClassName,
+  authInputIconClassName,
   authLabelClassName,
   authPageBackgroundClass,
 } from "@/components/auth/auth-shared";
@@ -34,7 +35,7 @@ export default async function UpdatePasswordPage({ searchParams }: Props) {
           <AuthFormHeader
             eyebrow={
               <AuthEyebrow>
-                <KeyRound className="size-3.5 text-cyan-300" />
+                <KeyRound className="size-3.5 text-sky-600" />
                 Nueva contraseña
               </AuthEyebrow>
             }
@@ -51,7 +52,7 @@ export default async function UpdatePasswordPage({ searchParams }: Props) {
                   Nueva contraseña
                 </Label>
                 <div className="relative">
-                  <Lock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-white/45" />
+                  <Lock className={authInputIconClassName} />
                   <Input
                     id="password"
                     name="password"
@@ -68,7 +69,7 @@ export default async function UpdatePasswordPage({ searchParams }: Props) {
           </AuthFormBody>
 
           <AuthFormFooter>
-            <p className="text-sm text-white/55">
+            <p className="text-sm text-slate-600">
               Si llegaste desde un enlace de recuperación, al guardar se actualizará tu acceso.
             </p>
             <AuthTextLink href="/auth/login">Ir a iniciar sesión</AuthTextLink>

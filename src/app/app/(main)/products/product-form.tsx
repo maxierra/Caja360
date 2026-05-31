@@ -39,6 +39,7 @@ type Props = {
   container?: boolean;
   canEditPrice?: boolean;
   canEditStock?: boolean;
+  submitPulse?: boolean;
 };
 
 function round2(n: number) {
@@ -65,6 +66,7 @@ export function ProductForm({
   container = true,
   canEditPrice = true,
   canEditStock = true,
+  submitPulse = false,
 }: Props) {
   const initialCost = defaults?.cost ?? 0;
   const initialPrice = defaults?.price ?? 0;
@@ -525,7 +527,13 @@ export function ProductForm({
         )}
 
         <div className="flex items-center justify-end gap-2 pt-2 lg:pt-0">
-          <Button type="submit" className="h-12 w-full rounded-2xl text-base font-semibold lg:h-10 lg:w-auto">
+          <Button
+            type="submit"
+            className={cn(
+              "h-12 w-full rounded-2xl text-base font-semibold lg:h-10 lg:w-auto",
+              submitPulse && "animate-onboarding-product-pulse border-2 border-emerald-300"
+            )}
+          >
             Guardar producto
           </Button>
         </div>

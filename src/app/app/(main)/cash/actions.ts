@@ -48,7 +48,8 @@ async function openCashRegisterActionImpl(prevState: { success: boolean; error: 
 
     revalidatePath("/app/cash");
     revalidatePath("/app/pos");
-    
+    revalidatePath("/app/onboarding");
+
     return { success: true, error: null };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) };

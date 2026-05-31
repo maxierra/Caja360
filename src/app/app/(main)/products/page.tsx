@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 
 import { ProductsClient } from "@/app/app/(main)/products/products-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { isMissingOnboardingColumnError } from "@/lib/onboarding-column";
 import { createClient } from "@/lib/supabase/server";
 
 type ProductRow = {
@@ -47,6 +48,16 @@ export default async function ProductsPage() {
   const supabase = await createClient();
   const { data: authData } = await supabase.auth.getUser();
   const userId = authData.user?.id ?? null;
+
+  const { data: bizOnb, error: bizOnbError } = await supabase
+    .from("businesses")
+    .select("onboarding_completed_at")
+    .eq("id", businessId)
+    .maybeSingle();
+  const onboardingIncomplete = isMissingOnboardingColumnError(bizOnbError)
+    ? false
+    : !(bizOnb as { onboarding_completed_at?: string | null } | null)?.onboarding_completed_at;
+
   const { data } = await supabase
     .from("products")
     .select(
@@ -58,6 +69,9 @@ export default async function ProductsPage() {
     .limit(5000);
 
   const products = (data ?? []) as ProductRow[];
+
+  /** Sin productos y onboarding pendiente: siempre guía en esta página (no depende de ?ob=). */
+  const guideProductStep = onboardingIncomplete && products.length === 0;
 
   let canEditPrice = true;
   let canEditStock = true;
@@ -84,7 +98,12 @@ export default async function ProductsPage() {
         <p className="text-sm text-muted-foreground">Alta, edición y control de stock.</p>
       </div>
 
-      <ProductsClient products={products} canEditPrice={canEditPrice} canEditStock={canEditStock} />
+      <ProductsClient
+        products={products}
+        canEditPrice={canEditPrice}
+        canEditStock={canEditStock}
+        guideProductStep={guideProductStep}
+      />
     </div>
   );
 }

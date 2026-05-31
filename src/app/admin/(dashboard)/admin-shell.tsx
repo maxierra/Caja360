@@ -8,6 +8,7 @@ import {
   Bell,
   CreditCard,
   Activity,
+  PackageSearch,
   Shield,
   ChevronLeft,
   ChevronRight,
@@ -27,6 +28,7 @@ type NavItem = {
 const ADMIN_NAV_ITEMS: NavItem[] = [
   { href: "/admin", label: "Suscripciones", icon: CreditCard },
   { href: "/admin/payments", label: "Pagos", icon: CreditCard },
+  { href: "/admin/carga-productos", label: "Carga productos", icon: PackageSearch },
   { href: "/admin/alertas", label: "Alertas", icon: Bell },
   { href: "/admin/monitoring", label: "Monitoreo", icon: Activity },
 ];
@@ -37,6 +39,23 @@ type Props = {
     email: string | null;
   };
 };
+
+const SIDEBAR_COLLAPSED_KEY = "admin_sidebar_collapsed";
+const SIDEBAR_COLLAPSED_EVENT = "admin-sidebar-collapsed-change";
+
+function getSidebarCollapsedSnapshot() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+}
+
+function subscribeToSidebarCollapsed(onStoreChange: () => void) {
+  window.addEventListener("storage", onStoreChange);
+  window.addEventListener(SIDEBAR_COLLAPSED_EVENT, onStoreChange);
+  return () => {
+    window.removeEventListener("storage", onStoreChange);
+    window.removeEventListener(SIDEBAR_COLLAPSED_EVENT, onStoreChange);
+  };
+}
 
 function userInitials(email: string | null) {
   const base = (email ?? "").trim();
@@ -52,16 +71,17 @@ function userInitials(email: string | null) {
 
 export function AdminShell({ children, user }: Props) {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = React.useState(false);
+  const collapsed = React.useSyncExternalStore(
+    subscribeToSidebarCollapsed,
+    getSidebarCollapsedSnapshot,
+    () => false
+  );
 
-  React.useEffect(() => {
-    const saved = window.localStorage.getItem("admin_sidebar_collapsed");
-    setCollapsed(saved === "1");
+  const toggleCollapsed = React.useCallback(() => {
+    const next = !getSidebarCollapsedSnapshot();
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
+    window.dispatchEvent(new Event(SIDEBAR_COLLAPSED_EVENT));
   }, []);
-
-  React.useEffect(() => {
-    window.localStorage.setItem("admin_sidebar_collapsed", collapsed ? "1" : "0");
-  }, [collapsed]);
 
   return (
     <div className="min-h-dvh w-full bg-[var(--pos-bg)]">
@@ -95,7 +115,7 @@ export function AdminShell({ children, user }: Props) {
               type="button"
               variant="ghost"
               size="icon"
-              onClick={() => setCollapsed((v) => !v)}
+              onClick={toggleCollapsed}
               aria-label={collapsed ? "Expandir sidebar" : "Colapsar sidebar"}
             >
               {collapsed ? (

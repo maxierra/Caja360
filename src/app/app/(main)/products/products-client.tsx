@@ -7,6 +7,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Pencil, Plus, ScanBarcode, ScanLine, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
+import { ONBOARDING_GUIDE_QUERY, ONBOARDING_GUIDE_TOTAL_STEPS } from "@/app/app/(main)/onboarding/onboarding-guide-constants";
+import { OnboardingSpotlight } from "@/app/app/(main)/onboarding/onboarding-spotlight";
 import { parseScaleBarcode } from "@/app/app/(main)/pos/utils/scale-barcode";
 import { createProduct, deleteProduct, updateProduct } from "@/app/app/(main)/products/actions";
 import { ProductCreateMobileWizard } from "@/app/app/(main)/products/product-create-mobile-wizard";
@@ -39,7 +41,133 @@ type Props = {
   products: ProductRow[];
   canEditPrice?: boolean;
   canEditStock?: boolean;
+  /** Recorrido inicial: resaltar «Nuevo producto» y llevar a Caja al guardar. */
+  guideProductStep?: boolean;
 };
+
+type CreateGuidePhase = "barcode" | "name" | "cost" | "price" | "stock" | "lowStock" | "submit";
+type CreateGuideConfirm = {
+  cost: boolean;
+  price: boolean;
+  stock: boolean;
+  lowStock: boolean;
+};
+
+function resolveProductCreateOnboardingGuide(confirm: CreateGuideConfirm): {
+  target: Element | null;
+  phase: CreateGuidePhase;
+} {
+  if (typeof document === "undefined") return { target: null, phase: "barcode" };
+
+  const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
+  if (!dialog) return { target: null, phase: "barcode" };
+
+  const q = (sel: string) => dialog.querySelector(sel);
+
+  const barcodeEl = q("#barcode") as HTMLInputElement | null;
+  const barcode = barcodeEl?.value?.trim() ?? "";
+  if (barcode.length < 6) return { target: barcodeEl ?? dialog, phase: "barcode" };
+
+  const nameEl = q("#name") as HTMLInputElement | null;
+  const name = nameEl?.value?.trim() ?? "";
+  if (name.length < 2) return { target: nameEl ?? dialog, phase: "name" };
+
+  const costEl = q("#cost") as HTMLInputElement | null;
+  const cost = parseFloat(String(costEl?.value ?? ""));
+  if (!Number.isFinite(cost) || cost <= 0 || !confirm.cost) return { target: costEl ?? dialog, phase: "cost" };
+
+  const priceEl = q("#price") as HTMLInputElement | null;
+  const price = parseFloat(String(priceEl?.value ?? ""));
+  if (!Number.isFinite(price) || price <= 0 || !confirm.price) return { target: priceEl ?? dialog, phase: "price" };
+
+  const soldByWeight = (q('input[name="sold_by_weight"]') as HTMLInputElement)?.value === "on";
+  const stockSel = soldByWeight ? "#stock_decimal" : "#stock";
+  const stockEl = q(stockSel) as HTMLInputElement | null;
+  const stock = parseFloat(String(stockEl?.value ?? ""));
+  if (!Number.isFinite(stock) || stock <= 0 || !confirm.stock) return { target: stockEl ?? dialog, phase: "stock" };
+
+  const lowStockSel = soldByWeight ? "#low_stock_threshold_decimal" : "#low_stock_threshold";
+  const lowStockEl = q(lowStockSel) as HTMLInputElement | null;
+  const lowStock = parseFloat(String(lowStockEl?.value ?? ""));
+  if (!Number.isFinite(lowStock) || lowStock <= 0 || !confirm.lowStock) {
+    return { target: lowStockEl ?? dialog, phase: "lowStock" };
+  }
+
+  const submitBtn = dialog.querySelector('form button[type="submit"]') as HTMLButtonElement | null;
+  return { target: submitBtn ?? dialog, phase: "submit" };
+}
+
+function productCreateGuideHints(phase: CreateGuidePhase): { title: string; description: React.ReactNode } {
+  switch (phase) {
+    case "barcode":
+      return {
+        title: "Escaneá el producto",
+        description: (
+          <>
+            Escaneá o escribí el <span className="font-semibold text-foreground">código de barras</span>. Si existe en la
+            base, se autocompletan los datos.
+          </>
+        ),
+      };
+    case "name":
+      return {
+        title: "Revisá el nombre sugerido",
+        description: (
+          <>
+            Confirmá el <span className="font-semibold text-foreground">nombre</span> (si no vino completo, ajustalo).
+          </>
+        ),
+      };
+    case "cost":
+      return {
+        title: "Ajustá precio de compra",
+        description: (
+          <>
+            Revisá el <span className="font-semibold text-foreground">precio de compra</span> para que el margen quede
+            correcto.
+          </>
+        ),
+      };
+    case "price":
+      return {
+        title: "Ajustá precio de venta",
+        description: (
+          <>
+            Confirmá el <span className="font-semibold text-foreground">precio de venta</span> sugerido y corregilo si hace
+            falta.
+          </>
+        ),
+      };
+    case "stock":
+      return {
+        title: "Cargá cantidad inicial",
+        description: (
+          <>
+            Indicá cuánto <span className="font-semibold text-foreground">stock inicial</span> entra (unidades o kg).
+          </>
+        ),
+      };
+    case "lowStock":
+      return {
+        title: "Definí stock mínimo",
+        description: (
+          <>
+            Marcá el <span className="font-semibold text-foreground">stock mínimo</span> para alertas de reposición.
+          </>
+        ),
+      };
+    default:
+      return {
+        title: "Guardá el producto",
+        description: (
+          <>
+            Tocá <span className="font-semibold text-foreground">«Guardar producto»</span> para crearlo y seguir con la
+            caja.
+          </>
+        ),
+      };
+  }
+}
 
 function formatStock(p: ProductRow) {
   return p.sold_by_weight
@@ -67,13 +195,28 @@ function findProductByScannedCode(products: ProductRow[], raw: string): ProductR
   return undefined;
 }
 
-export function ProductsClient({ products, canEditPrice = true, canEditStock = true }: Props) {
+export function ProductsClient({
+  products,
+  canEditPrice = true,
+  canEditStock = true,
+  guideProductStep = false,
+}: Props) {
   const router = useRouter();
   const isMobileAssist = useIsMobilePos();
   const [openCreate, setOpenCreate] = React.useState(false);
   const [editProduct, setEditProduct] = React.useState<ProductRow | null>(null);
   const [pending, startTransition] = React.useTransition();
   const [scannerSearchOpen, setScannerSearchOpen] = React.useState(false);
+
+  const newProductHighlightRef = React.useRef<HTMLSpanElement>(null);
+  const formGuideTargetRef = React.useRef<Element | null>(null);
+  const [formGuideTick, setFormGuideTick] = React.useState(0);
+  const [createGuideConfirm, setCreateGuideConfirm] = React.useState<CreateGuideConfirm>({
+    cost: false,
+    price: false,
+    stock: false,
+    lowStock: false,
+  });
 
   const [nameQuery, setNameQuery] = React.useState("");
   const [barcodeQuery, setBarcodeQuery] = React.useState("");
@@ -104,6 +247,10 @@ export function ProductsClient({ products, canEditPrice = true, canEditStock = t
             await createProduct(formData);
             toast.success("Producto creado");
             setOpenCreate(false);
+            if (guideProductStep) {
+              router.push(`/app/cash?${ONBOARDING_GUIDE_QUERY}=cash`);
+              return;
+            }
             router.refresh();
           } catch (err) {
             toast.error("No se pudo crear", {
@@ -113,7 +260,7 @@ export function ProductsClient({ products, canEditPrice = true, canEditStock = t
         })();
       });
     },
-    [router]
+    [guideProductStep, router]
   );
 
   const onUpdate = React.useCallback(
@@ -184,25 +331,171 @@ export function ProductsClient({ products, canEditPrice = true, canEditStock = t
     [barcodeQuery, products, openEdit]
   );
 
+  const showProductSpotlight = guideProductStep && !openCreate;
+
+  React.useEffect(() => {
+    if (!openCreate) {
+      setCreateGuideConfirm({ cost: false, price: false, stock: false, lowStock: false });
+      return;
+    }
+    if (isMobileAssist || !guideProductStep) return;
+    const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
+    if (!dialog) return;
+
+    const markIfValid = (id: string) => {
+      const el = dialog.querySelector(`#${id}`) as HTMLInputElement | null;
+      const n = parseFloat(String(el?.value ?? ""));
+      return Number.isFinite(n) && n > 0;
+    };
+
+    const onFocusOut = (ev: Event) => {
+      const t = ev.target as HTMLElement | null;
+      if (!(t instanceof HTMLInputElement)) return;
+
+      if (t.id === "price") {
+        if (markIfValid("price")) setCreateGuideConfirm((prev) => ({ ...prev, price: true }));
+        return;
+      }
+      if (t.id === "cost") {
+        if (markIfValid("cost")) setCreateGuideConfirm((prev) => ({ ...prev, cost: true }));
+        return;
+      }
+      if (t.id === "stock" || t.id === "stock_decimal") {
+        if (markIfValid(t.id)) setCreateGuideConfirm((prev) => ({ ...prev, stock: true }));
+        return;
+      }
+      if (t.id === "low_stock_threshold" || t.id === "low_stock_threshold_decimal") {
+        if (markIfValid(t.id)) setCreateGuideConfirm((prev) => ({ ...prev, lowStock: true }));
+      }
+    };
+
+    dialog.addEventListener("focusout", onFocusOut, true);
+    return () => dialog.removeEventListener("focusout", onFocusOut, true);
+  }, [openCreate, isMobileAssist, guideProductStep]);
+
+  React.useEffect(() => {
+    if (!guideProductStep || !openCreate || isMobileAssist) return undefined;
+    const id = window.setInterval(() => setFormGuideTick((x) => x + 1), 180);
+    return () => clearInterval(id);
+  }, [guideProductStep, openCreate, isMobileAssist]);
+
+  React.useLayoutEffect(() => {
+    if (!guideProductStep || !openCreate || isMobileAssist) {
+      formGuideTargetRef.current = null;
+      return;
+    }
+    formGuideTargetRef.current = resolveProductCreateOnboardingGuide(createGuideConfirm).target;
+  }, [guideProductStep, openCreate, formGuideTick, isMobileAssist, createGuideConfirm]);
+
+  const createGuidePhase = React.useMemo(() => {
+    if (!guideProductStep || !openCreate || isMobileAssist) return null;
+    return resolveProductCreateOnboardingGuide(createGuideConfirm).phase;
+  }, [guideProductStep, openCreate, formGuideTick, isMobileAssist, createGuideConfirm]);
+
+  const showCreateFormSpotlight = Boolean(guideProductStep && openCreate && !isMobileAssist);
+  const createFormGuideCopy = productCreateGuideHints(createGuidePhase ?? "name");
+
+  React.useEffect(() => {
+    if (!guideProductStep || !openCreate || isMobileAssist) return undefined;
+    const idsByPhase: Record<CreateGuidePhase, string[]> = {
+      barcode: ["barcode"],
+      name: ["name"],
+      cost: ["cost"],
+      price: ["price"],
+      stock: ["stock", "stock_decimal"],
+      lowStock: ["low_stock_threshold", "low_stock_threshold_decimal"],
+      submit: [],
+    };
+    const t = window.setTimeout(() => {
+      const phase = createGuidePhase ?? "barcode";
+      const ids = idsByPhase[phase];
+      for (const id of ids) {
+        const el = document.getElementById(id) as HTMLElement | null;
+        if (!el) continue;
+        el.focus({ preventScroll: true });
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        break;
+      }
+    }, 260);
+    return () => window.clearTimeout(t);
+  }, [guideProductStep, openCreate, isMobileAssist, createGuidePhase]);
+
+  React.useEffect(() => {
+    if (!showProductSpotlight) return undefined;
+    const rafId = window.requestAnimationFrame(() => {
+      const wrap = newProductHighlightRef.current;
+      if (!wrap) return;
+      wrap.scrollIntoView({ block: "center", behavior: "smooth" });
+      wrap.querySelector("button")?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(rafId);
+  }, [showProductSpotlight]);
+
   return (
-    <div className="mt-6">
+    <div className="relative mt-6">
+      <OnboardingSpotlight
+        active={showProductSpotlight}
+        targetRef={newProductHighlightRef}
+        stackBase={88}
+        dimBackground={false}
+        stepIndex={2}
+        totalSteps={ONBOARDING_GUIDE_TOTAL_STEPS}
+        title="Tu primer producto"
+        description={
+          <>
+            <span className="font-semibold text-foreground">Tocá el botón verde «Nuevo producto»</span> arriba a la
+            derecha: es lo único que se ve nítido y titila. El resto queda borroso a propósito.
+          </>
+        }
+      />
+
+      <OnboardingSpotlight
+        active={showCreateFormSpotlight}
+        targetRef={formGuideTargetRef}
+        stackBase={96}
+        dimBackground={false}
+        remeasureSignal={formGuideTick}
+        stepIndex={2}
+        totalSteps={ONBOARDING_GUIDE_TOTAL_STEPS}
+        title={createFormGuideCopy.title}
+        description={createFormGuideCopy.description}
+      />
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-sm text-muted-foreground">
           {hasActiveFilters
             ? `Mostrando ${filtered.length} de ${products.length} productos`
             : `${products.length} productos`}
         </div>
-        <Button
-          type="button"
-          onClick={() => {
-            setEditProduct(null);
-            setOpenCreate(true);
-          }}
-          className="h-10 rounded-2xl"
+        <span
+          ref={newProductHighlightRef}
+          className={cn(
+            "inline-flex flex-col items-end gap-2 sm:items-center",
+            showProductSpotlight && "relative z-[92]"
+          )}
         >
-          <Plus className="size-4" />
-          Nuevo producto
-        </Button>
+          {showProductSpotlight ? (
+            <span className="pointer-events-none rounded-full bg-emerald-600 px-3 py-1.5 text-center text-[11px] font-bold uppercase leading-none tracking-wide text-white shadow-lg shadow-emerald-900/30 ring-2 ring-white/80 ring-offset-2 ring-offset-transparent animate-pulse">
+              Paso 1 · Tocá acá
+            </span>
+          ) : null}
+          <Button
+            type="button"
+            onClick={() => {
+              setEditProduct(null);
+              setOpenCreate(true);
+            }}
+            className={cn(
+              "gap-2 rounded-2xl font-semibold",
+              showProductSpotlight
+                ? "animate-onboarding-product-pulse relative min-h-12 min-w-[min(100vw-2rem,280px)] border-2 border-white/90 bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500 px-8 text-base font-bold text-white hover:brightness-110 hover:saturate-110 md:min-w-[260px]"
+                : "h-10"
+            )}
+          >
+            <Plus className={cn("size-4", showProductSpotlight && "size-5")} />
+            Nuevo producto
+          </Button>
+        </span>
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -336,7 +629,7 @@ export function ProductsClient({ products, canEditPrice = true, canEditStock = t
       <AnimatePresence>
         {openCreate ? (
           <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 max-lg:p-0"
+            className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4 max-lg:p-0"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -390,6 +683,7 @@ export function ProductsClient({ products, canEditPrice = true, canEditStock = t
                       action={onCreate}
                       canEditPrice={canEditPrice}
                       canEditStock={canEditStock}
+                      submitPulse={showCreateFormSpotlight && createGuidePhase === "submit"}
                     />
                   )}
                 </div>
@@ -402,7 +696,7 @@ export function ProductsClient({ products, canEditPrice = true, canEditStock = t
       <AnimatePresence>
         {editProduct ? (
           <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 max-lg:p-0"
+            className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4 max-lg:p-0"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

@@ -12,6 +12,7 @@ import {
   AuthPrimaryButton,
   authAlertError,
   authInputClassName,
+  authInputIconClassName,
   authLabelClassName,
   authPageBackgroundClass,
 } from "@/components/auth/auth-shared";
@@ -50,7 +51,7 @@ export default async function RegisterPage({ searchParams }: Props) {
               <AuthFormHeader
                 eyebrow={
                   <AuthEyebrow>
-                    <Store className="size-3.5 text-cyan-300" />
+                    <Store className="size-3.5 text-sky-600" />
                     Alta de cuenta
                   </AuthEyebrow>
                 }
@@ -67,7 +68,7 @@ export default async function RegisterPage({ searchParams }: Props) {
                       Email
                     </Label>
                     <div className="relative">
-                      <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-white/45" />
+                      <Mail className={authInputIconClassName} />
                       <Input
                         id="email"
                         name="email"
@@ -84,7 +85,7 @@ export default async function RegisterPage({ searchParams }: Props) {
                       Contraseña
                     </Label>
                     <div className="relative">
-                      <Lock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-white/45" />
+                      <Lock className={authInputIconClassName} />
                       <Input
                         id="password"
                         name="password"
@@ -101,11 +102,11 @@ export default async function RegisterPage({ searchParams }: Props) {
               </AuthFormBody>
 
               <AuthFormFooter>
-                <p className="text-sm text-white/55">
+                <p className="text-sm text-slate-600">
                   ¿Ya tenés cuenta?{" "}
                   <Link
                     href="/auth/login"
-                    className="font-semibold text-white/90 underline-offset-4 hover:text-white hover:underline"
+                    className="font-semibold text-sky-800 underline-offset-4 hover:text-sky-950 hover:underline"
                   >
                     Ingresar
                   </Link>

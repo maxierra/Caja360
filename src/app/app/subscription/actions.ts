@@ -34,7 +34,7 @@ const PLAN_ENV: Record<PlanKey, { amountKey: string; daysKey: string; titleKey: 
 
     titleKey: "MERCADOPAGO_PLAN_MONTHLY_TITLE",
 
-    defaultAmount: "15",
+    defaultAmount: "15000",
 
     defaultDays: "30",
 
@@ -50,7 +50,7 @@ const PLAN_ENV: Record<PlanKey, { amountKey: string; daysKey: string; titleKey: 
 
     titleKey: "MERCADOPAGO_PLAN_SEMESTER_TITLE",
 
-    defaultAmount: "80",
+    defaultAmount: "75000",
 
     defaultDays: "180",
 
@@ -66,7 +66,7 @@ const PLAN_ENV: Record<PlanKey, { amountKey: string; daysKey: string; titleKey: 
 
     titleKey: "MERCADOPAGO_PLAN_ANNUAL_TITLE",
 
-    defaultAmount: "150",
+    defaultAmount: "150000",
 
     defaultDays: "365",
 

@@ -13,6 +13,7 @@ import {
   authAlertError,
   authAlertSuccess,
   authInputClassName,
+  authInputIconClassName,
   authLabelClassName,
   authPageBackgroundClass,
 } from "@/components/auth/auth-shared";
@@ -47,7 +48,7 @@ export default async function ResetPage({ searchParams }: Props) {
               <AuthFormHeader
                 eyebrow={
                   <AuthEyebrow>
-                    <Store className="size-3.5 text-cyan-300" />
+                    <Store className="size-3.5 text-sky-600" />
                     Recuperar acceso
                   </AuthEyebrow>
                 }
@@ -65,7 +66,7 @@ export default async function ResetPage({ searchParams }: Props) {
                       Email
                     </Label>
                     <div className="relative">
-                      <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-white/45" />
+                      <Mail className={authInputIconClassName} />
                       <Input
                         id="email"
                         name="email"

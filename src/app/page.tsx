@@ -2,13 +2,13 @@ import Link from "next/link";
 
 import { LandingAbout } from "@/components/landing/LandingAbout";
 import { LandingContact } from "@/components/landing/LandingContact";
+import { LandingCombos } from "@/components/landing/LandingCombos";
 import { LandingDesktopDownload } from "@/components/landing/LandingDesktopDownload";
 import { LandingFeatures } from "@/components/landing/LandingFeatures";
 import { LandingHero } from "@/components/landing/LandingHero";
 import { LandingPricing } from "@/components/landing/LandingPricing";
 import { LandingVideoTutorials } from "@/components/landing/LandingVideoTutorials";
-import { LivePosDemo } from "@/components/landing/LivePosDemo";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { landingCtaPrimary } from "@/components/landing/landing-cta-classes";
 import { getAllPlansConfig } from "@/app/app/subscription/actions";
 
 type Props = {
@@ -20,20 +20,27 @@ export default async function Home({ searchParams }: Props) {
   const plans = await getAllPlansConfig();
 
   return (
-    <div className="flex min-h-full flex-1 flex-col bg-[radial-gradient(circle_at_top_right,rgba(236,72,153,0.28),transparent_38%),radial-gradient(circle_at_bottom_left,rgba(16,185,129,0.24),transparent_36%),linear-gradient(135deg,#070b1a_0%,#0f172a_40%,#1e1b4b_100%)] text-white">
-      <header className="sticky top-0 z-20 border-b border-white/10 bg-black/35 backdrop-blur-xl">
+    <div className="flex min-h-full flex-1 flex-col bg-gradient-to-b from-sky-50/90 via-zinc-50 to-emerald-50/70 text-slate-900">
+      <header className="sticky top-0 z-20 border-b border-sky-100/80 bg-white/80 backdrop-blur-md">
         <div className="mx-auto w-full max-w-7xl px-3 sm:px-4">
           <div className="flex flex-col gap-0 md:flex-row md:items-center md:justify-between md:gap-4 md:py-3">
             <div className="flex items-center justify-between gap-3 py-2.5 md:py-0">
               <div className="flex min-w-0 items-center gap-2">
-                <div className="size-2 shrink-0 rounded-full bg-fuchsia-400 shadow-[0_0_18px_rgba(244,114,182,0.9)]" />
-                <span className="truncate text-sm font-semibold tracking-tight text-white">POS SaaS</span>
+                <div className="size-2 shrink-0 rounded-full bg-sky-600 shadow-[0_0_12px_rgba(2,132,199,0.35)]" />
+                <span className="truncate text-sm font-semibold tracking-tight text-slate-900">
+                  POS SaaS
+                </span>
               </div>
               <div className="flex shrink-0 items-center gap-2 md:hidden">
-                <ThemeToggle />
+                <Link
+                  href="/auth/register"
+                  className={`${landingCtaPrimary} inline-flex h-8 items-center justify-center rounded-lg px-3 text-[0.75rem] font-bold`}
+                >
+                  <span>Probar gratis</span>
+                </Link>
                 <Link
                   href="/auth/login"
-                  className="animate-pulse-glow inline-flex h-8 items-center justify-center rounded-lg border-0 bg-gradient-to-r from-cyan-500 to-fuchsia-500 px-3 text-[0.75rem] font-bold text-white shadow-[0_0_15px_rgba(34,211,238,0.4)] transition-all active:scale-95"
+                  className="inline-flex h-8 items-center justify-center rounded-lg border border-sky-200/90 bg-white px-3 text-[0.75rem] font-semibold text-slate-800 transition-colors hover:bg-sky-50/80"
                 >
                   Ingresar
                 </Link>
@@ -41,37 +48,42 @@ export default async function Home({ searchParams }: Props) {
             </div>
 
             <nav
-              className="-mx-3 flex gap-x-4 gap-y-1 overflow-x-auto border-t border-white/10 px-3 py-2.5 text-[13px] [-ms-overflow-style:none] [scrollbar-width:none] sm:gap-x-5 md:mx-0 md:flex-1 md:flex-wrap md:justify-center md:overflow-visible md:border-t-0 md:px-0 md:py-0 lg:justify-end [&::-webkit-scrollbar]:hidden"
+              className="-mx-3 flex gap-x-4 gap-y-1 overflow-x-auto border-t border-sky-100/90 px-3 py-2.5 text-[13px] [-ms-overflow-style:none] [scrollbar-width:none] sm:gap-x-5 md:mx-0 md:flex-1 md:flex-wrap md:justify-center md:overflow-visible md:border-t-0 md:px-0 md:py-0 lg:justify-end [&::-webkit-scrollbar]:hidden"
               aria-label="Secciones"
             >
-              <a href="#demo" className="shrink-0 font-medium text-white/70 transition hover:text-white">
-                Demo
-              </a>
-              <a href="#features" className="shrink-0 font-medium text-white/70 transition hover:text-white">
+              <a href="#features" className="shrink-0 font-medium text-slate-600 transition hover:text-sky-800">
                 Funciones
               </a>
-              <a href="#nosotros" className="shrink-0 font-medium text-white/70 transition hover:text-white">
+              <a href="#nosotros" className="shrink-0 font-medium text-slate-600 transition hover:text-sky-800">
                 Nosotros
               </a>
-              <a href="#tutoriales" className="shrink-0 font-medium text-white/70 transition hover:text-white">
+              <a href="#tutoriales" className="shrink-0 font-medium text-slate-600 transition hover:text-sky-800">
                 Tutoriales
               </a>
-              <a href="#contacto" className="shrink-0 font-medium text-white/70 transition hover:text-white">
+              <a href="#combos" className="shrink-0 font-medium text-slate-600 transition hover:text-sky-800">
+                Combos
+              </a>
+              <a href="#contacto" className="shrink-0 font-medium text-slate-600 transition hover:text-sky-800">
                 Contacto
               </a>
-              <a href="#descarga" className="shrink-0 font-medium text-white/70 transition hover:text-white">
+              <a href="#descarga" className="shrink-0 font-medium text-slate-600 transition hover:text-sky-800">
                 Descarga
               </a>
-              <a href="#planes" className="shrink-0 font-medium text-white/70 transition hover:text-white">
+              <a href="#planes" className="shrink-0 font-medium text-slate-600 transition hover:text-sky-800">
                 Planes
               </a>
             </nav>
 
             <div className="hidden items-center gap-2 md:flex">
-              <ThemeToggle />
+              <Link
+                href="/auth/register"
+                className={`${landingCtaPrimary} inline-flex h-9 items-center justify-center rounded-lg px-4 text-sm font-bold`}
+              >
+                <span>Probar 7 días gratis</span>
+              </Link>
               <Link
                 href="/auth/login"
-                className="animate-pulse-glow inline-flex h-8 items-center justify-center rounded-lg border-0 bg-gradient-to-r from-cyan-500 to-fuchsia-500 px-4 text-[0.8rem] font-bold text-white transition-all hover:scale-110 active:scale-95 shadow-[0_0_15px_rgba(34,211,238,0.4)]"
+                className="inline-flex h-9 items-center justify-center rounded-lg border border-sky-200/90 bg-white px-4 text-sm font-semibold text-slate-800 transition-colors hover:bg-sky-50/80"
               >
                 Ingresar
               </Link>
@@ -82,26 +94,14 @@ export default async function Home({ searchParams }: Props) {
 
       <main className="mx-auto w-full max-w-7xl flex-1 px-3 py-6 sm:px-4 sm:py-10">
         {sp.missingSupabase ? (
-          <div className="mb-8 rounded-xl border border-amber-400/30 bg-amber-500/15 p-4 text-sm text-amber-100">
-            Falta configurar Supabase. Podés ver la landing, pero <span className="text-white">/app</span> y autenticación no funcionarán hasta completar <code>.env.local</code>.
+          <div className="mb-8 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+            Falta configurar Supabase. Podés ver la landing, pero <span className="font-medium">/app</span> y
+            autenticación no funcionarán hasta completar <code className="rounded bg-white px-1">.env.local</code>.
           </div>
         ) : null}
 
         <section className="mb-10 md:mb-14">
           <LandingHero />
-        </section>
-
-        <section id="demo" aria-labelledby="demo-heading" className="mb-2">
-          <h2
-            id="demo-heading"
-            className="mb-4 text-center text-lg font-semibold tracking-tight text-white/90 md:text-xl"
-          >
-            Demo en vivo:{" "}
-            <span className="bg-gradient-to-r from-fuchsia-200 via-violet-200 to-cyan-200 bg-clip-text text-transparent">
-              productos → venta → dashboard
-            </span>
-          </h2>
-          <LivePosDemo />
         </section>
 
         <section id="features">
@@ -112,26 +112,29 @@ export default async function Home({ searchParams }: Props) {
 
         <LandingVideoTutorials />
 
+        <LandingCombos />
+
         <LandingContact />
 
         <LandingDesktopDownload />
 
         <LandingPricing plans={plans} />
 
-        <section className="mt-12 rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-center backdrop-blur-sm md:p-8">
-          <p className="text-sm text-white/70 md:text-base">
-            ¿Querés probarlo con tus datos? Creá tu cuenta en segundos.
+        <section className="mt-12 rounded-2xl border border-sky-100 bg-gradient-to-br from-white via-sky-50/60 to-violet-50/50 p-6 text-center shadow-sm shadow-sky-100/80 md:p-8">
+          <p className="text-sm text-slate-600 md:text-base">
+            ¿Querés ver el sistema con tu propio negocio? Creá tu cuenta en segundos:{" "}
+            <strong className="font-semibold text-sky-900">7 días gratis</strong>, sin tarjeta.
           </p>
           <div className="mt-4 flex flex-col items-center justify-center gap-2 sm:flex-row sm:gap-3">
             <Link
               href="/auth/register"
-              className="inline-flex h-10 items-center justify-center rounded-xl bg-gradient-to-r from-fuchsia-500 to-violet-500 px-5 text-sm font-semibold text-white shadow-lg shadow-fuchsia-500/20 transition hover:opacity-90"
+              className={`${landingCtaPrimary} inline-flex h-10 items-center justify-center rounded-xl px-6 text-sm font-bold`}
             >
-              Crear cuenta gratis
+              <span>Crear cuenta gratis</span>
             </Link>
             <Link
               href="/auth/login"
-              className="text-sm font-medium text-cyan-200/90 underline-offset-4 transition hover:text-cyan-100 hover:underline"
+              className="text-sm font-medium text-sky-800/90 underline-offset-4 transition hover:text-sky-950 hover:underline"
             >
               Ya tengo cuenta
             </Link>

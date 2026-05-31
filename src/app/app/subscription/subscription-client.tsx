@@ -164,6 +164,48 @@ export function SubscriptionClient({
         featureText: "text-teal-800/85 dark:text-teal-200/75",
       },
     },
+    {
+      key: "semester" as PlanKey,
+      title: "Plan semestral",
+      months: 6,
+      plan: plans.semester,
+      tagline: "Pago único por 6 meses",
+      description: "Ideal para estabilizar costos con mejor precio total.",
+      featured: true,
+      theme: {
+        card: "border-emerald-200/80 bg-gradient-to-b from-emerald-50/90 to-white dark:from-emerald-950/35 dark:to-zinc-900/90 dark:border-emerald-800/60",
+        badge: "bg-emerald-600 text-white dark:bg-emerald-500",
+        title: "text-emerald-900 dark:text-emerald-100",
+        dollar: "text-emerald-600 dark:text-emerald-400",
+        price: "text-emerald-950 dark:text-emerald-50",
+        arsBadge: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/70 dark:text-emerald-100",
+        muted: "text-emerald-700/80 dark:text-emerald-300/80",
+        button: "bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400",
+        featuresBorder: "border-emerald-100 dark:border-emerald-900/50",
+        featureText: "text-emerald-800/85 dark:text-emerald-200/75",
+      },
+    },
+    {
+      key: "annual" as PlanKey,
+      title: "Plan anual",
+      months: 12,
+      plan: plans.annual,
+      tagline: "Pago único por 12 meses",
+      description: "La opción con mayor ahorro para todo el año.",
+      featured: false,
+      theme: {
+        card: "border-violet-200/80 bg-gradient-to-b from-violet-50/90 to-white dark:from-violet-950/35 dark:to-zinc-900/90 dark:border-violet-800/60",
+        badge: "bg-violet-600 text-white dark:bg-violet-500",
+        title: "text-violet-900 dark:text-violet-100",
+        dollar: "text-violet-600 dark:text-violet-400",
+        price: "text-violet-950 dark:text-violet-50",
+        arsBadge: "bg-violet-100 text-violet-800 dark:bg-violet-900/70 dark:text-violet-100",
+        muted: "text-violet-700/80 dark:text-violet-300/80",
+        button: "bg-violet-600 text-white hover:bg-violet-700 dark:bg-violet-500 dark:hover:bg-violet-400",
+        featuresBorder: "border-violet-100 dark:border-violet-900/50",
+        featureText: "text-violet-800/85 dark:text-violet-200/75",
+      },
+    },
   ] as const;
 
   return (
@@ -287,11 +329,11 @@ export function SubscriptionClient({
         <div className="text-center sm:text-left">
           <h3 className="text-sm font-semibold tracking-tight text-foreground">Elegí tu plan</h3>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Una opción simple. El pago se procesa de forma segura con Mercado Pago.
+            Elegí mensual, semestral o anual. El pago se procesa de forma segura con Mercado Pago.
           </p>
         </div>
 
-        <div className="mx-auto grid w-full max-w-xl grid-cols-1 gap-4 sm:gap-3">
+        <div className="mx-auto grid w-full max-w-5xl grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {planItems.map(({ key, title, months, plan, tagline, description, featured, theme }) => {
             const isLoading = loadingPlanKey === key;
             const payAmount = plan.amount;

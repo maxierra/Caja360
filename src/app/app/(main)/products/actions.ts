@@ -60,6 +60,7 @@ async function createProductImpl(formData: FormData) {
   }
 
   revalidatePath("/app/products");
+  revalidatePath("/app/onboarding");
 }
 
 async function deleteProductImpl(formData: FormData) {

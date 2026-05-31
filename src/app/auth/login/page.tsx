@@ -14,6 +14,7 @@ import {
   authAlertError,
   authAlertSuccess,
   authInputClassName,
+  authInputIconClassName,
   authLabelClassName,
   authPageBackgroundClass,
 } from "@/components/auth/auth-shared";
@@ -48,7 +49,7 @@ export default async function LoginPage({ searchParams }: Props) {
               <AuthFormHeader
                 eyebrow={
                   <AuthEyebrow>
-                    <Store className="size-3.5 text-cyan-300" />
+                    <Store className="size-3.5 text-sky-600" />
                     Acceso profesional
                   </AuthEyebrow>
                 }
@@ -69,7 +70,7 @@ export default async function LoginPage({ searchParams }: Props) {
                       Email
                     </Label>
                     <div className="relative">
-                      <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-white/45" />
+                      <Mail className={authInputIconClassName} />
                       <Input
                         id="email"
                         name="email"
@@ -86,7 +87,7 @@ export default async function LoginPage({ searchParams }: Props) {
                       Contraseña
                     </Label>
                     <div className="relative">
-                      <Lock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-white/45" />
+                      <Lock className={authInputIconClassName} />
                       <Input
                         id="password"
                         name="password"
@@ -104,11 +105,11 @@ export default async function LoginPage({ searchParams }: Props) {
 
               <AuthFormFooter>
                 <AuthTextLink href="/auth/reset">Olvidé mi contraseña</AuthTextLink>
-                <p className="text-sm text-white/55">
+                <p className="text-sm text-slate-600">
                   ¿No tenés cuenta?{" "}
                   <Link
                     href="/auth/register"
-                    className="font-semibold text-white/90 underline-offset-4 hover:text-white hover:underline"
+                    className="font-semibold text-sky-800 underline-offset-4 hover:text-sky-950 hover:underline"
                   >
                     Crear cuenta
                   </Link>

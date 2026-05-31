@@ -3,48 +3,64 @@
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
+import type { LucideIcon } from "lucide-react";
 import { ArrowRight, BarChart3, Layers, ShieldCheck, Sparkles, Zap } from "lucide-react";
 
 import posHero from "@/pos.png";
+import { landingCtaPrimary } from "@/components/landing/landing-cta-classes";
 
 const container = {
   hidden: { opacity: 0 },
   show: {
     opacity: 1,
-    transition: { staggerChildren: 0.08, delayChildren: 0.05 },
+    transition: { staggerChildren: 0.06, delayChildren: 0.03 },
   },
 };
 
 const item = {
-  hidden: { opacity: 0, y: 22 },
+  hidden: { opacity: 0, y: 14 },
   show: {
     opacity: 1,
     y: 0,
-    transition: { type: "spring" as const, damping: 26, stiffness: 280 },
+    transition: { type: "spring" as const, damping: 28, stiffness: 320 },
   },
 };
 
-const pills = [
-  { icon: Zap, label: "Sin instalar nada" },
-  { icon: ShieldCheck, label: "Datos en la nube" },
-  { icon: BarChart3, label: "Ventas e informes" },
+const pills: Array<{ icon: LucideIcon; label: string; tone: string; iconTone: string }> = [
+  {
+    icon: Zap,
+    label: "En la nube, desde el navegador",
+    tone: "border-sky-200/90 bg-sky-50/80 text-sky-950",
+    iconTone: "text-sky-600",
+  },
+  {
+    icon: ShieldCheck,
+    label: "Datos respaldados",
+    tone: "border-emerald-200/90 bg-emerald-50/80 text-emerald-950",
+    iconTone: "text-emerald-700",
+  },
+  {
+    icon: BarChart3,
+    label: "Ventas e informes",
+    tone: "border-violet-200/90 bg-violet-50/80 text-violet-950",
+    iconTone: "text-violet-700",
+  },
 ];
 
 export function LandingHero() {
   return (
     <div className="relative">
-      {/* Glow decorativo */}
       <div
         aria-hidden
-        className="pointer-events-none absolute -left-1/4 top-0 h-[420px] w-[420px] rounded-full bg-fuchsia-500/25 blur-[100px] md:h-[520px] md:w-[520px]"
+        className="pointer-events-none absolute -left-[15%] top-0 h-[min(420px,55vw)] w-[min(420px,55vw)] rounded-full bg-sky-200/35 blur-3xl md:h-[480px] md:w-[480px]"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute -right-1/4 top-24 h-[360px] w-[360px] rounded-full bg-cyan-400/20 blur-[90px] md:top-12"
+        className="pointer-events-none absolute -right-[10%] top-24 h-[min(360px,50vw)] w-[min(360px,50vw)] rounded-full bg-violet-200/30 blur-3xl md:top-16"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute left-1/2 top-40 h-[200px] w-[80%] max-w-3xl -translate-x-1/2 rounded-full bg-violet-500/15 blur-[80px]"
+        className="pointer-events-none absolute bottom-0 left-1/3 h-48 w-[70%] max-w-xl -translate-x-1/2 rounded-full bg-emerald-200/25 blur-3xl"
       />
 
       <div className="relative grid grid-cols-1 items-center gap-10 lg:grid-cols-2 lg:gap-12 xl:gap-16">
@@ -55,22 +71,21 @@ export function LandingHero() {
           className="text-center lg:text-left"
         >
           <motion.div variants={item} initial={false} className="flex justify-center lg:justify-start">
-            <span className="group relative inline-flex items-center gap-2 overflow-hidden rounded-full border border-white/20 bg-white/[0.07] px-4 py-1.5 text-[0.8125rem] font-semibold leading-snug text-cyan-100 shadow-[0_0_40px_-8px_rgba(34,211,238,0.45)] backdrop-blur-md sm:text-sm">
-              <span className="absolute inset-0 -translate-x-full animate-[posShimmer_2.5s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/12 to-transparent" />
-              <Sparkles className="relative size-3.5 text-cyan-300" />
-              <span className="relative">POS moderno para comercios en Argentina</span>
+            <span className="inline-flex items-center gap-2 rounded-full border border-sky-200/90 bg-sky-50/90 px-4 py-1.5 text-[0.8125rem] font-medium leading-snug text-sky-950 shadow-sm sm:text-sm">
+              <Sparkles className="size-3.5 text-sky-600" />
+              POS para comercios en Argentina
             </span>
           </motion.div>
 
           <motion.h1
             variants={item}
             initial={false}
-            className="mx-auto mt-5 max-w-4xl text-balance font-serif font-bold tracking-tight text-white lg:mx-0 lg:max-w-none"
+            className="mx-auto mt-5 max-w-4xl text-balance font-serif font-bold tracking-tight text-slate-900 lg:mx-0 lg:max-w-none"
           >
             <span className="block text-[1.75rem] leading-[1.12] sm:text-4xl sm:leading-tight md:text-[2.5rem] md:leading-[1.1] lg:text-5xl lg:leading-[1.08] xl:text-6xl xl:leading-[1.05]">
               Cobrá más rápido.
             </span>
-            <span className="mt-1.5 block bg-gradient-to-r from-fuchsia-300 via-violet-200 to-cyan-300 bg-clip-text text-[1.75rem] text-transparent leading-[1.12] sm:text-4xl sm:leading-tight md:text-[2.5rem] md:leading-[1.1] lg:text-5xl lg:leading-[1.08] xl:text-6xl xl:leading-[1.05]">
+            <span className="mt-1.5 block bg-gradient-to-r from-sky-800 via-violet-700 to-teal-700 bg-clip-text text-[1.75rem] leading-[1.12] text-transparent sm:text-4xl sm:leading-tight md:text-[2.5rem] md:leading-[1.1] lg:text-5xl lg:leading-[1.08] xl:text-6xl xl:leading-[1.05]">
               Controlá tu negocio en vivo.
             </span>
           </motion.h1>
@@ -78,11 +93,11 @@ export function LandingHero() {
           <motion.p
             variants={item}
             initial={false}
-            className="mx-auto mt-5 max-w-2xl text-[1.0625rem] leading-relaxed text-white/85 md:text-lg md:leading-relaxed lg:mx-0 lg:mt-6"
+            className="mx-auto mt-5 max-w-2xl text-[1.0625rem] leading-relaxed text-slate-600 md:text-lg md:leading-relaxed lg:mx-0 lg:mt-6"
           >
-            Stock, caja, tickets e informes en un solo sistema. Más abajo, una{" "}
-            <strong className="text-white">demo en vivo</strong> te muestra el flujo completo de una venta, como en el
-            mostrador.
+            Stock, caja, tickets e informes en un solo lugar. Registrate y probá{" "}
+            <strong className="font-semibold text-sky-800">7 días gratis</strong> — sin tarjeta. Los tutoriales en
+            video te muestran cada paso cuando quieras profundizar.
           </motion.p>
 
           <motion.div
@@ -92,15 +107,16 @@ export function LandingHero() {
           >
             <Link
               href="/auth/register"
-              className="group relative inline-flex h-12 items-center justify-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r from-fuchsia-500 via-violet-500 to-cyan-500 px-8 text-sm font-bold text-white shadow-[0_0_40px_-6px_rgba(217,70,239,0.65)] transition hover:scale-[1.02] hover:shadow-[0_0_50px_-4px_rgba(34,211,238,0.5)] active:scale-[0.98]"
+              className={`${landingCtaPrimary} inline-flex h-12 items-center justify-center rounded-xl px-8 text-sm font-bold`}
             >
-              <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent opacity-0 transition group-hover:translate-x-full group-hover:opacity-100 group-hover:duration-700" />
-              <span className="relative">Empezar gratis</span>
-              <ArrowRight className="relative size-4 transition group-hover:translate-x-0.5" />
+              <span className="inline-flex items-center gap-2">
+                Empezar gratis 7 días
+                <ArrowRight className="size-4 shrink-0" aria-hidden />
+              </span>
             </Link>
             <Link
               href="/auth/login"
-              className="inline-flex h-12 items-center justify-center rounded-2xl border border-white/25 bg-white/5 px-7 text-sm font-semibold text-white backdrop-blur-sm transition hover:border-white/40 hover:bg-white/10"
+              className="inline-flex h-12 items-center justify-center rounded-xl border border-violet-200/90 bg-white/90 px-7 text-sm font-semibold text-slate-800 shadow-sm backdrop-blur-sm transition-colors hover:bg-violet-50/80"
             >
               Ya tengo cuenta
             </Link>
@@ -111,12 +127,12 @@ export function LandingHero() {
             initial={false}
             className="mt-10 flex flex-wrap items-center justify-center gap-2 md:gap-3 lg:justify-start"
           >
-            {pills.map(({ icon: Icon, label }) => (
+            {pills.map(({ icon: Icon, label, tone, iconTone }) => (
               <span
                 key={label}
-                className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs font-medium text-white/85 backdrop-blur-md md:text-sm"
+                className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-medium shadow-sm md:text-sm ${tone}`}
               >
-                <Icon className="size-4 shrink-0 text-cyan-300/90" />
+                <Icon className={`size-4 shrink-0 ${iconTone}`} />
                 {label}
               </span>
             ))}
@@ -125,23 +141,19 @@ export function LandingHero() {
           <motion.div
             variants={item}
             initial={false}
-            className="mx-auto mt-12 flex max-w-2xl flex-wrap items-center justify-center gap-x-8 gap-y-3 border-y border-white/10 py-6 text-sm text-white/55 lg:mx-0 lg:justify-start"
+            className="mx-auto mt-12 flex max-w-2xl flex-wrap items-center justify-center gap-x-8 gap-y-3 border-y border-sky-100 py-6 text-sm text-slate-600 lg:mx-0 lg:justify-start"
           >
             <span className="inline-flex items-center gap-2">
-              <Layers className="size-4 text-fuchsia-300/80" />
+              <Layers className="size-4 text-sky-600/70" />
               Multi-rubro: kiosco, almacén, retail
             </span>
-            <span className="hidden h-4 w-px bg-white/20 sm:block" aria-hidden />
-            <span>Prueba incluida · sin tarjeta para registrarte</span>
+            <span className="hidden h-4 w-px bg-gradient-to-b from-transparent via-sky-200 to-transparent sm:block" aria-hidden />
+            <span>Sin tarjeta para registrarte</span>
           </motion.div>
         </motion.div>
 
         <div className="relative mx-auto w-full max-w-md lg:mx-0 lg:max-w-none">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0 -z-10 scale-110 rounded-3xl bg-gradient-to-br from-fuchsia-500/20 via-violet-500/15 to-cyan-500/20 blur-3xl"
-          />
-          <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] p-2 shadow-[0_25px_80px_-20px_rgba(0,0,0,0.5)] backdrop-blur-sm">
+          <div className="relative overflow-hidden rounded-2xl border border-sky-100 bg-white p-2 shadow-xl shadow-sky-200/40 ring-1 ring-violet-100/80">
             <Image
               src={posHero}
               alt="Interfaz del punto de venta: caja, productos e informes"

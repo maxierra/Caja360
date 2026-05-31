@@ -300,6 +300,7 @@ async function checkoutSaleImpl(input: {
   revalidatePath("/app/products");
   revalidatePath("/app/pos");
   revalidatePath("/app/empleados");
+  revalidatePath("/app/onboarding");
 
   return {
     saleId,

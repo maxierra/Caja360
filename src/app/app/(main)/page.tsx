@@ -1,7 +1,9 @@
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { AlertTriangle, Banknote, CreditCard, Landmark, Receipt, ShoppingCart, TrendingUp, Wallet } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
+import { isMissingOnboardingColumnError } from "@/lib/onboarding-column";
 import { DateSelector } from "./date-selector";
 
 type SaleRow = {
@@ -127,6 +129,23 @@ export default async function AppHomePage(props: { searchParams: Promise<{ date?
   }
 
   const supabase = await createClient();
+
+  if (hasSupabaseEnv) {
+    const { data: ob, error: obError } = await supabase
+      .from("businesses")
+      .select("onboarding_completed_at")
+      .eq("id", businessId)
+      .maybeSingle();
+    if (isMissingOnboardingColumnError(obError)) {
+      // Fallback temporal para ambientes donde aún no corrió la migración.
+    } else {
+    const completed = (ob as { onboarding_completed_at?: string | null } | null)?.onboarding_completed_at;
+    if (!completed) {
+      redirect("/app/products?ob=product");
+    }
+    }
+  }
+
   const dateParam = searchParams.date;
   const now = dateParam ? new Date(`${dateParam}T12:00:00`) : new Date();
   const todayStart = new Date(now);

@@ -4,6 +4,9 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+import { shouldCelebrateOnboardingAfterSale } from "@/app/app/(main)/onboarding/actions";
+import { ONBOARDING_GUIDE_TOTAL_STEPS } from "@/app/app/(main)/onboarding/onboarding-guide-constants";
+import { OnboardingSpotlight } from "@/app/app/(main)/onboarding/onboarding-spotlight";
 import { checkoutSale } from "@/app/app/(main)/pos/actions";
 import { CartPanel } from "@/app/app/(main)/pos/components/CartPanel";
 import { POSLayout } from "@/app/app/(main)/pos/components/POSLayout";
@@ -20,6 +23,7 @@ import { formatSaleTicketPlainText, printTicket as printTicketInBrowser } from "
 import { isAndroidUserAgent, printTicket as printTicketRawBt } from "@/utils/printTicket";
 import { useIsMobilePos } from "@/hooks/use-is-mobile-pos";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { ScanLine } from "lucide-react";
 
 export { type PosProduct } from "@/app/app/(main)/pos/hooks/use-products";
@@ -55,6 +59,7 @@ export function PosClient({
   paymentMethodConfig,
   posCustomers = [],
   mercadoPagoQrReady = false,
+  guidePosStep = false,
 }: {
   products: PosProduct[];
   business: PosBusinessInfo;
@@ -63,10 +68,15 @@ export function PosClient({
   /** Lista para ventas en cuenta corriente (incluye límite y saldo disponible). */
   posCustomers?: PosCustomerCredit[];
   mercadoPagoQrReady?: boolean;
+  /** Recorrido inicial: foco en escaneo/búsqueda y luego Cobrar. */
+  guidePosStep?: boolean;
 }) {
   const router = useRouter();
   const isMobilePos = useIsMobilePos();
   const searchRef = React.useRef<HTMLInputElement | null>(null);
+  const searchGuideRef = React.useRef<HTMLDivElement>(null);
+  const cartPanelGuideRef = React.useRef<HTMLDivElement>(null);
+  const cobrarGuideRef = React.useRef<HTMLDivElement>(null);
   const [pending, startTransition] = React.useTransition();
   const [paymentOpen, setPaymentOpen] = React.useState(false);
   const [scannerOpen, setScannerOpen] = React.useState(false);
@@ -309,6 +319,13 @@ export function PosClient({
                 ? `ID ${res.saleId.slice(0, 8)} · Promo: ${promo.name} (-$${promo.amount.toFixed(2)})`
                 : `ID ${res.saleId.slice(0, 8)}`,
             });
+
+            const celebrate = await shouldCelebrateOnboardingAfterSale();
+            if (celebrate) {
+              router.push("/app/onboarding?celebrate=1");
+              return;
+            }
+            router.refresh();
           } catch (err) {
             if (printWin && !printWin.closed) printWin.close();
             toast.error("No se pudo cobrar", {
@@ -318,7 +335,7 @@ export function PosClient({
         })();
       });
     },
-    [business, cart, closePayment, paymentLabelMap, startTransition]
+    [business, cart, closePayment, paymentLabelMap, router, startTransition]
   );
 
   const onMercadoPagoAutoPaid = React.useCallback(
@@ -353,13 +370,47 @@ export function PosClient({
           },
         }),
       });
-      router.refresh();
+      void (async () => {
+        const celebrate = await shouldCelebrateOnboardingAfterSale();
+        if (celebrate) {
+          router.push("/app/onboarding?celebrate=1");
+          return;
+        }
+        router.refresh();
+      })();
     },
     [business, cart, closePayment, paymentLabelMap, router]
   );
 
+  const posGuideActive = Boolean(guidePosStep && cashOpen && !paymentOpen);
+  const posSpotlightRef = cart.items.length > 0 ? cobrarGuideRef : searchGuideRef;
+
+  React.useEffect(() => {
+    if (!posGuideActive || cart.items.length > 0) return;
+    const id = window.requestAnimationFrame(() => {
+      searchGuideRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+      searchRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [posGuideActive, cart.items.length]);
+
   return (
-    <div>
+    <div className="relative">
+      <OnboardingSpotlight
+        active={posGuideActive}
+        targetRef={posSpotlightRef}
+        stackBase={55}
+        dimBackground={false}
+        stepIndex={4}
+        totalSteps={ONBOARDING_GUIDE_TOTAL_STEPS}
+        title={cart.items.length > 0 ? "Cobrar la venta" : "Escaneá o buscá un producto"}
+        description={
+          cart.items.length > 0
+            ? "Tocá «Cobrar», elegí el medio de pago y confirmá el cobro. Con eso completás tu primera venta guiada."
+            : "Usá el buscador/escáner para agregar un producto al carrito. Después te guiamos al botón Cobrar."
+        }
+      />
+
       {!cashOpen && (
         <div className="mb-4 rounded-lg border border-amber-500/50 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
           <span className="font-semibold">Caja cerrada:</span> Abrí un turno en la sección{" "}
@@ -378,7 +429,15 @@ export function PosClient({
               <ScanLine className="size-5" />
               Escanear
             </Button>
-            <div className="order-2 min-w-0 flex-1 lg:order-1">
+            <div
+              ref={searchGuideRef}
+              className={cn(
+                "order-2 min-w-0 flex-1 lg:order-1",
+                posGuideActive &&
+                  cart.items.length === 0 &&
+                  "relative z-[82] rounded-2xl shadow-[0_0_0_4px_rgba(16,185,129,0.55),0_8px_40px_-8px_rgba(16,185,129,0.35)]"
+              )}
+            >
               <SearchBar inputRef={searchRef} value={prod.query} onChange={prod.setQuery} onKeyDown={onSearchKeyDown} />
             </div>
           </div>
@@ -402,18 +461,22 @@ export function PosClient({
           </div>
         }
         right={
-          <CartPanel
-            items={cart.items}
-            total={cart.total}
-            pending={pending}
-            onInc={cart.inc}
-            onDec={cart.dec}
-            onSetQty={cart.setQty}
-            onRemove={cart.remove}
-            onOpenPayment={openPayment}
-            onFocusScanner={() => searchRef.current?.focus()}
-            lastAddedProductId={cart.lastAddedProductId}
-          />
+          <div className={cn("relative min-h-0 h-full", posGuideActive && "z-[82]")}>
+            <CartPanel
+              guidePanelRef={cartPanelGuideRef}
+              guideCobrarRef={cobrarGuideRef}
+              items={cart.items}
+              total={cart.total}
+              pending={pending}
+              onInc={cart.inc}
+              onDec={cart.dec}
+              onSetQty={cart.setQty}
+              onRemove={cart.remove}
+              onOpenPayment={openPayment}
+              onFocusScanner={() => searchRef.current?.focus()}
+              lastAddedProductId={cart.lastAddedProductId}
+            />
+          </div>
         }
       />
 

@@ -16,7 +16,12 @@ export type SubscriptionRow = {
 export function businessHasAppAccess(sub: SubscriptionRow | null): boolean {
   if (!sub) return true;
 
-  if (sub.status === "active") return true;
+  if (sub.status === "active") {
+    if (!sub.current_period_end) return true;
+    const end = parseDbTimestamptzMs(sub.current_period_end);
+    if (end == null) return true;
+    return Date.now() < end;
+  }
 
   if (sub.status === "trialing") {
     if (!sub.current_period_end) return true;

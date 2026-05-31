@@ -20,6 +20,8 @@ type Props = {
   onOpenPayment: () => void;
   onFocusScanner: () => void;
   lastAddedProductId?: string | null;
+  guidePanelRef?: React.RefObject<HTMLDivElement | null>;
+  guideCobrarRef?: React.RefObject<HTMLDivElement | null>;
 };
 
 function round2(n: number) {
@@ -41,6 +43,8 @@ export function CartPanel({
   onOpenPayment,
   onFocusScanner,
   lastAddedProductId,
+  guidePanelRef,
+  guideCobrarRef,
 }: Props) {
   const [gramsDraftById, setGramsDraftById] = React.useState<Record<string, string>>({});
 
@@ -81,7 +85,7 @@ export function CartPanel({
   );
 
   return (
-    <div className="flex h-full flex-col">
+    <div ref={guidePanelRef} className="flex h-full flex-col">
       {/* Header: Total centralizado y destacado */}
       <div className="border-b border-[var(--pos-border)] bg-gradient-to-b from-emerald-50 to-white p-4 dark:from-emerald-950/20 dark:to-transparent">
         <div className="text-center">
@@ -245,31 +249,33 @@ export function CartPanel({
 
       {/* Footer: Botón Cobrar */}
       <div className="border-t border-[var(--pos-border)] p-4">
-        <Button
-          type="button"
-          className={cn(
-            "relative h-14 w-full rounded-2xl text-lg font-bold",
-            "bg-emerald-600 text-white hover:bg-emerald-700",
-            "shadow-lg shadow-emerald-200 dark:shadow-emerald-900/40",
-            "disabled:bg-zinc-300 disabled:shadow-none dark:disabled:bg-zinc-700"
-          )}
-          disabled={pending || items.length === 0}
-          onClick={onOpenPayment}
-        >
-          <span className="absolute inset-0 overflow-hidden rounded-2xl">
-            <span
-              className={cn(
-                "absolute -left-1/2 top-0 h-full w-1/2",
-                "bg-gradient-to-r from-transparent via-white/20 to-transparent",
-                "[transform:skewX(-20deg)]",
-                items.length > 0 ? "animate-[posShimmer_1.8s_ease-in-out_infinite]" : ""
-              )}
-            />
-          </span>
-          <span className="relative flex items-center justify-center gap-2">
-            Cobrar ${total}
-          </span>
-        </Button>
+        <span ref={guideCobrarRef} className="block rounded-2xl">
+          <Button
+            type="button"
+            className={cn(
+              "relative h-14 w-full rounded-2xl text-lg font-bold",
+              "bg-emerald-600 text-white hover:bg-emerald-700",
+              "shadow-lg shadow-emerald-200 dark:shadow-emerald-900/40",
+              "disabled:bg-zinc-300 disabled:shadow-none dark:disabled:bg-zinc-700"
+            )}
+            disabled={pending || items.length === 0}
+            onClick={onOpenPayment}
+          >
+            <span className="absolute inset-0 overflow-hidden rounded-2xl">
+              <span
+                className={cn(
+                  "absolute -left-1/2 top-0 h-full w-1/2",
+                  "bg-gradient-to-r from-transparent via-white/20 to-transparent",
+                  "[transform:skewX(-20deg)]",
+                  items.length > 0 ? "animate-[posShimmer_1.8s_ease-in-out_infinite]" : ""
+                )}
+              />
+            </span>
+            <span className="relative flex items-center justify-center gap-2">
+              Cobrar ${total}
+            </span>
+          </Button>
+        </span>
       </div>
     </div>
   );

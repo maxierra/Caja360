@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { useFormState } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertTriangle,
@@ -20,10 +19,13 @@ import {
 import { useRouter } from "next/navigation";
 
 import { closeCashRegisterAction, createCashMovementAction, openCashRegisterAction } from "@/app/app/(main)/cash/actions";
+import { ONBOARDING_GUIDE_QUERY, ONBOARDING_GUIDE_TOTAL_STEPS } from "@/app/app/(main)/onboarding/onboarding-guide-constants";
+import { OnboardingSpotlight } from "@/app/app/(main)/onboarding/onboarding-spotlight";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import { generateTicketHtml, getPaymentMethodLabel, printTicket, type PosBusinessInfo, type TicketData, type TicketItem } from "@/lib/ticket-utils";
 import { Eye, Printer } from "lucide-react";
 
@@ -84,6 +86,8 @@ type Props = {
     difference_totals: MethodTotals;
   }>;
   business: PosBusinessInfo;
+  /** Recorrido inicial: foco en «Abrir caja» y salto al POS al confirmar apertura. */
+  guideCashStep?: boolean;
 };
 
 function moneyAr(value: number) {
@@ -298,8 +302,11 @@ export function CashPageClient({
   ledgerRows,
   historyTurns,
   business,
+  guideCashStep = false,
 }: Props) {
   const router = useRouter();
+  const openCashHighlightRef = React.useRef<HTMLSpanElement>(null);
+  const handledCashOpenSuccessRef = React.useRef(false);
   const [openCashModal, setOpenCashModal] = React.useState(false);
   const [movementModal, setMovementModal] = React.useState(false);
   const [movementSavedModal, setMovementSavedModal] = React.useState(false);
@@ -308,7 +315,10 @@ export function CashPageClient({
   const [historyModal, setHistoryModal] = React.useState(false);
   const [historyDetailTurn, setHistoryDetailTurn] = React.useState<Props["historyTurns"][number] | null>(null);
   
-  const [openCashState, openCashFormAction] = useFormState(openCashRegisterAction, { success: false, error: null as string | null });
+  const [openCashState, openCashFormAction] = React.useActionState(openCashRegisterAction, {
+    success: false,
+    error: null as string | null,
+  });
   const [countedCash, setCountedCash] = React.useState(String(expectedByMethod.cash || 0));
   const [countedCard, setCountedCard] = React.useState(String(expectedByMethod.card || 0));
   const [countedTransfer, setCountedTransfer] = React.useState(String(expectedByMethod.transfer || 0));
@@ -323,13 +333,33 @@ export function CashPageClient({
     setCountedMercadoPago(String(expectedByMethod.mercadopago || 0));
   }, [expectedByMethod.cash, expectedByMethod.card, expectedByMethod.transfer, expectedByMethod.mercadopago, closeModal]);
 
-  // Cerrar modal de apertura de caja cuando la acción se completa exitosamente
+  // Tras abrir caja: ir al POS si viene del recorrido inicial; si no, refrescar vista actual.
   React.useEffect(() => {
-    if (openCashState?.success) {
-      setOpenCashModal(false);
-      router.refresh(); // Refrescar la página para mostrar la caja abierta
+    if (!openCashState?.success) {
+      handledCashOpenSuccessRef.current = false;
+      return;
     }
-  }, [openCashState, router]);
+    if (handledCashOpenSuccessRef.current) return;
+    handledCashOpenSuccessRef.current = true;
+    setOpenCashModal(false);
+    if (guideCashStep) {
+      router.push(`/app/pos?${ONBOARDING_GUIDE_QUERY}=pos`);
+      return;
+    }
+    router.refresh();
+  }, [openCashState?.success, guideCashStep, router]);
+
+  const showCashSpotlight = guideCashStep && !openRegister && !openCashModal;
+
+  React.useEffect(() => {
+    if (!showCashSpotlight) return;
+    const id = window.requestAnimationFrame(() => {
+      const wrap = openCashHighlightRef.current;
+      wrap?.scrollIntoView({ block: "center", behavior: "smooth" });
+      wrap?.querySelector("button")?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [showCashSpotlight]);
 
   const counted = {
     cash: Number(countedCash || 0),
@@ -367,6 +397,16 @@ export function CashPageClient({
 
    return (
     <div className="w-full">
+      <OnboardingSpotlight
+        active={showCashSpotlight}
+        targetRef={openCashHighlightRef}
+        dimBackground={false}
+        stepIndex={3}
+        totalSteps={ONBOARDING_GUIDE_TOTAL_STEPS}
+        title="Abrir la caja"
+        description='Tocá «Abrir caja», dejá el saldo inicial en 0 si querés, y confirmá. Después pasamos al punto de venta.'
+      />
+
       <div className="flex items-center justify-end gap-3 mb-6">
 
         <div className="flex items-center gap-2">
@@ -375,10 +415,26 @@ export function CashPageClient({
             Ver turnos
           </Button>
           {!openRegister ? (
-            <Button type="button" onClick={() => setOpenCashModal(true)}>
-              <Wallet className="size-4" />
-              Abrir caja
-            </Button>
+            <span
+              ref={openCashHighlightRef}
+              className={cn(
+                "inline-flex rounded-xl",
+                showCashSpotlight &&
+                  "relative z-[82] shadow-[0_0_0_4px_rgba(16,185,129,0.55),0_8px_40px_-8px_rgba(16,185,129,0.35)]"
+              )}
+            >
+              <Button
+                type="button"
+                onClick={() => setOpenCashModal(true)}
+                className={cn(
+                  showCashSpotlight &&
+                    "animate-onboarding-product-pulse relative min-h-12 min-w-[min(100vw-2rem,240px)] rounded-2xl border-2 border-white/90 bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-500 px-7 text-base font-bold text-white hover:brightness-110 hover:saturate-110 md:min-w-[220px]"
+                )}
+              >
+                <Wallet className={cn("size-4", showCashSpotlight && "size-5")} />
+                Abrir caja
+              </Button>
+            </span>
           ) : (
             <>
               <Button type="button" variant="outline" onClick={() => setMovementModal(true)}>
@@ -725,7 +781,7 @@ export function CashPageClient({
       <AnimatePresence>
         {openCashModal ? (
           <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+            className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -788,7 +844,7 @@ export function CashPageClient({
       <AnimatePresence>
         {movementModal && openRegister ? (
           <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+            className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -891,7 +947,7 @@ export function CashPageClient({
       <AnimatePresence>
         {movementSavedModal ? (
           <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+            className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -925,7 +981,7 @@ export function CashPageClient({
       <AnimatePresence>
         {closeModal && openRegister ? (
           <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+            className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -1043,7 +1099,7 @@ export function CashPageClient({
       <AnimatePresence>
         {historyModal ? (
           <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+            className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

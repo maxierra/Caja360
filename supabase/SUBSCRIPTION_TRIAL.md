@@ -13,14 +13,17 @@ Tabla **`public.platform_settings`** (siempre **1 fila**, `id = 1`):
 
 | Columna | Ejemplo | Significado |
 |--------|---------|-------------|
-| `subscription_trial_interval` | `3 days` | Cuánto dura el trial al **crear un negocio nuevo** (`create_business_with_owner`). |
+| `subscription_trial_interval` | `7 days` | Cuánto dura el trial al **crear un negocio nuevo** (`create_business_with_owner`). |
 | `updated_at` | auto | Última modificación. |
 
 Valores válidos son intervalos de Postgres, por ejemplo:
 
 - `interval '5 minutes'` — prueba rápida del bloqueo  
-- `interval '3 days'` — producción típica  
+- `interval '7 days'` — producción alineada con la landing (prueba gratis 7 días)  
+- `interval '3 days'` — si preferís un trial más corto  
 - `interval '14 days'` — otra campaña  
+
+Las instalaciones nuevas que siguen `schema.sql` o la migración `20260514120000_subscription_trial_seven_days.sql` quedan con **7 días** por defecto. Si tu proyecto ya existía con **3 días**, ejecutá esa migración o actualizá la fila a mano (ver más abajo).
 
 ## Probar el bloqueo en ~5 minutos
 
@@ -46,7 +49,7 @@ Ejecutá **en un solo paso** (SQL Editor):
 
 `supabase/migrations/20250327120000_platform_settings_bootstrap.sql`
 
-Crea la tabla, la fila por defecto (`3 days`) y actualiza `create_business_with_owner` + `ensure_subscription_trial_for_business`.
+Crea la tabla y la fila inicial y actualiza `create_business_with_owner` + `ensure_subscription_trial_for_business`. Si querés **7 días** en esa base, después ejecutá también `20260514120000_subscription_trial_seven_days.sql`.
 
 ### Función `ensure_*` sola
 
@@ -71,7 +74,19 @@ Pasados los 5 minutos, el **middleware** debería redirigir a `/app/subscription
 
 El bloqueo aplica en **dos capas**: middleware (Edge) y **`src/app/app/(main)/layout.tsx`** (servidor Node). Si el middleware fallara en Edge, el layout igual redirige a `/app/subscription` al entrar a POS, productos, dashboard, etc. **Suscripción** y **setup** están fuera de `(main)` para que puedas pagar o completar el alta.
 
-### Volver a algo razonable para producción
+### Valores típicos para producción
+
+**7 días** (coincide con la landing):
+
+```sql
+update public.platform_settings
+set
+  subscription_trial_interval = interval '7 days',
+  updated_at = now()
+where id = 1;
+```
+
+Trial más corto:
 
 ```sql
 update public.platform_settings
