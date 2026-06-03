@@ -59,10 +59,12 @@ export function AdminPasswordResetTool() {
         toast.error(res.message ?? "No se pudo restablecer la contraseña.");
         return;
       }
-      toast.success("Contraseña actualizada", {
-        description: `Usuario: ${res.email}`,
-      });
-      setPassword("");
+      if ("ok" in res && res.ok) {
+        toast.success("Contraseña actualizada", {
+          description: `Usuario: ${res.email}`,
+        });
+        setPassword("");
+      }
     } finally {
       setLoading(false);
     }
