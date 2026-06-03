@@ -6,6 +6,7 @@ import { Calendar as CalendarIcon, FileDown } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { toArgentinaDateForExport } from "@/lib/argentina-time";
 import { exportToExcel } from "@/lib/excel-utils";
 
 type Props = {
@@ -25,6 +26,7 @@ export function CashFilter({ ledgerRows, turns }: Props) {
   const fmtDateTime = React.useMemo(
     () =>
       new Intl.DateTimeFormat("es-AR", {
+        timeZone: "America/Argentina/Buenos_Aires",
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
@@ -107,7 +109,7 @@ export function CashFilter({ ledgerRows, turns }: Props) {
 
   const handleExportLedger = () => {
     const reportData = ledgerRows.map(r => ({
-      Fecha: r.created_at ? fmtDateTime.format(new Date(r.created_at)) : "",
+      Fecha: r.created_at ? fmtDateTime.format(toArgentinaDateForExport(r.created_at)) : "",
       Tipo: kindLabel(r.kind),
       Movimiento: movementLabel(r.movement_type),
       "Medio de pago": methodLabel(r.method),
@@ -119,8 +121,8 @@ export function CashFilter({ ledgerRows, turns }: Props) {
 
   const handleExportTurns = () => {
     const reportData = turns.map(t => ({
-      Apertura: t.opened_at ? fmtDateTime.format(new Date(t.opened_at)) : "",
-      Cierre: t.closed_at ? fmtDateTime.format(new Date(t.closed_at)) : "",
+      Apertura: t.opened_at ? fmtDateTime.format(toArgentinaDateForExport(t.opened_at)) : "",
+      Cierre: t.closed_at ? fmtDateTime.format(toArgentinaDateForExport(t.closed_at)) : "",
       "Inicial (caja)": fmtMoney.format(Number(t.opening_amount) || 0),
       "Vendido (turno)": fmtMoney.format(Number(t.sold_total) || 0),
       "Final (caja)": fmtMoney.format(Number(t.closing_amount) || 0),

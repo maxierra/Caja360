@@ -107,6 +107,10 @@ export type AdminDeactivateResult =
   | { error: "forbidden" | "invalid_uuid" | "not_found" | "config"; message?: string }
   | { ok: true };
 
+export type AdminResetUserPasswordResult =
+  | { error: "forbidden" | "invalid_input" | "not_found" | "config"; message?: string }
+  | { ok: true; email: string };
+
 /**
  * Corta el acceso al POS (middleware + layout). No borra datos del negocio.
  * Estado `canceled` + provider `admin_suspended` para distinguir en el panel.
@@ -155,6 +159,85 @@ async function adminDeactivateSubscriptionImpl(businessId: string): Promise<Admi
   return { ok: true };
 }
 
+async function findUserIdByIdentifier(
+  admin: ReturnType<typeof createAdminClient>,
+  identifier: string
+): Promise<{ id: string; email: string } | null> {
+  const raw = identifier.trim().toLowerCase();
+  if (!raw) return null;
+
+  if (UUID_RE.test(raw)) {
+    const { data, error } = await admin.auth.admin.getUserById(raw);
+    if (error || !data.user?.id || !data.user.email) return null;
+    return { id: data.user.id, email: data.user.email };
+  }
+
+  let page = 1;
+  const perPage = 200;
+  while (page <= 10) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
+    if (error) throw new Error(error.message);
+    const users = data.users ?? [];
+    const match = users.find((user) => String(user.email ?? "").trim().toLowerCase() === raw);
+    if (match?.id && match.email) {
+      return { id: match.id, email: match.email };
+    }
+    if (users.length < perPage) break;
+    page += 1;
+  }
+
+  return null;
+}
+
+async function adminResetUserPasswordImpl(
+  identifier: string,
+  password: string
+): Promise<AdminResetUserPasswordResult> {
+  const adminEmail = await getPlatformAdminSessionEmail();
+  if (!adminEmail) return { error: "forbidden" };
+
+  const cleanIdentifier = identifier.trim();
+  const cleanPassword = password.trim();
+
+  if (!cleanIdentifier) {
+    return { error: "invalid_input", message: "Ingresá email o User ID." };
+  }
+  if (cleanPassword.length < 8) {
+    return { error: "invalid_input", message: "La contraseña debe tener al menos 8 caracteres." };
+  }
+
+  let admin;
+  try {
+    admin = createAdminClient();
+  } catch {
+    return { error: "config", message: "Falta SUPABASE_SERVICE_ROLE_KEY en el servidor." };
+  }
+
+  let authUser: { id: string; email: string } | null = null;
+  try {
+    authUser = await findUserIdByIdentifier(admin, cleanIdentifier);
+  } catch (error) {
+    return {
+      error: "config",
+      message: error instanceof Error ? error.message : "No se pudo buscar el usuario en Auth.",
+    };
+  }
+
+  if (!authUser) {
+    return { error: "not_found", message: "No se encontró el usuario en Supabase Auth." };
+  }
+
+  const { error } = await admin.auth.admin.updateUserById(authUser.id, {
+    password: cleanPassword,
+  });
+
+  if (error) {
+    return { error: "config", message: error.message };
+  }
+
+  return { ok: true, email: authUser.email };
+}
+
 export const adminActivateSubscription = createMonitoredAction(
   adminActivateSubscriptionImpl,
   "admin/activateSubscription",
@@ -162,4 +245,8 @@ export const adminActivateSubscription = createMonitoredAction(
 export const adminDeactivateSubscription = createMonitoredAction(
   adminDeactivateSubscriptionImpl,
   "admin/deactivateSubscription",
+);
+export const adminResetUserPassword = createMonitoredAction(
+  adminResetUserPasswordImpl,
+  "admin/resetUserPassword",
 );

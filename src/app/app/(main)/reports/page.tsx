@@ -13,6 +13,7 @@ import { ReportsExportButton } from "@/app/app/(main)/reports/reports-export-cli
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { getArgentinaDayRangeUtcIso } from "@/lib/argentina-time";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 
@@ -64,7 +65,7 @@ function pct(value: number) {
 
 function periodLabel(monthKey: string) {
   const [y, m] = monthKey.split("-").map(Number);
-  const d = new Date(y, (m || 1) - 1, 1);
+  const d = new Date(Date.UTC(y, (m || 1) - 1, 1, 12, 0, 0, 0));
   return new Intl.DateTimeFormat("es-AR", { month: "long", year: "numeric" }).format(d);
 }
 
@@ -171,10 +172,11 @@ export default async function ReportsPage({
   searchParams?: Promise<{ month?: string }>;
 }) {
   const sp = (await searchParams) ?? {};
+  const currentArYmd = getArgentinaDayRangeUtcIso().ymd;
   const selectedMonth =
     typeof sp.month === "string" && /^\d{4}-\d{2}$/.test(sp.month)
       ? sp.month
-      : `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+      : currentArYmd.slice(0, 7);
 
   const cookieStore = await cookies();
   const businessId = cookieStore.get("active_business_id")?.value;
@@ -198,10 +200,13 @@ export default async function ReportsPage({
   }
 
   const [selYear, selMonth] = selectedMonth.split("-").map(Number);
-  const periodStart = new Date(selYear, (selMonth || 1) - 1, 1);
-  periodStart.setHours(0, 0, 0, 0);
-  const periodEnd = new Date(selYear, (selMonth || 1), 1);
-  periodEnd.setHours(0, 0, 0, 0);
+  const monthStartYmd = `${String(selYear).padStart(4, "0")}-${String(selMonth || 1).padStart(2, "0")}-01`;
+  const nextMonthYmd =
+    (selMonth || 1) === 12
+      ? `${String(selYear + 1).padStart(4, "0")}-01-01`
+      : `${String(selYear).padStart(4, "0")}-${String((selMonth || 1) + 1).padStart(2, "0")}-01`;
+  const { startIso: periodStartIso } = getArgentinaDayRangeUtcIso(monthStartYmd);
+  const { startIso: periodEndIso } = getArgentinaDayRangeUtcIso(nextMonthYmd);
 
   const supabase = await createClient();
   const [{ data: salesData }, { data: fixedExpensesData }] = await Promise.all([
@@ -209,8 +214,8 @@ export default async function ReportsPage({
       .from("sales")
       .select("id,total,status,created_at")
       .eq("business_id", businessId)
-      .gte("created_at", periodStart.toISOString())
-      .lt("created_at", periodEnd.toISOString()),
+      .gte("created_at", periodStartIso)
+      .lt("created_at", periodEndIso),
     supabase
       .from("fixed_expenses")
       .select("id,name,amount,frequency,category,active")
@@ -247,7 +252,7 @@ export default async function ReportsPage({
   const days =
     Math.max(
       1,
-      Math.round((periodEnd.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24))
+      Math.round((Date.parse(periodEndIso) - Date.parse(periodStartIso)) / (1000 * 60 * 60 * 24))
     );
   const fixedExpensesTotal = fixedExpenses.reduce((acc, e) => acc + fixedExpenseForPeriod(e, days), 0);
   const netProfit = grossProfit - fixedExpensesTotal;

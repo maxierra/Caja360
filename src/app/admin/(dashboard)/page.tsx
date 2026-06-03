@@ -1,4 +1,5 @@
 import { AdminConversionDashboardView } from "@/app/admin/(dashboard)/admin-conversion-dashboard";
+import { AdminPasswordResetTool } from "@/app/admin/(dashboard)/admin-password-reset-tool";
 import { loadAdminConversionDashboard, loadAdminDownloadStats, loadAdminSubscriptionList } from "@/app/admin/(dashboard)/data";
 import { AdminSubscriptionsOverview } from "@/app/admin/(dashboard)/subscriptions-overview";
 import { AdminWithMonitoring } from "@/components/admin-with-monitoring";
@@ -81,6 +82,8 @@ async function AdminAdminBody({ billingDays, month }: { billingDays: number; mon
 
   return (
     <>
+      <AdminPasswordResetTool />
+
       {!downloadStatsLoaded.ok && downloadStatsLoaded.error !== "forbidden" ? (
         <Card className="border-amber-400/40">
           <CardHeader>

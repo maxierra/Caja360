@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { formatArgentinaDateTime } from "@/lib/argentina-time";
 import { cn } from "@/lib/utils";
 import { generateTicketHtml, getPaymentMethodLabel, printTicket, type PosBusinessInfo, type TicketData, type TicketItem } from "@/lib/ticket-utils";
 import { Eye, Printer } from "lucide-react";
@@ -96,21 +97,6 @@ function moneyAr(value: number) {
     currency: "ARS",
     maximumFractionDigits: 2,
   }).format(value);
-}
-
-function formatArDateTime(iso: string) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat("es-AR", {
-    timeZone: "America/Argentina/Buenos_Aires",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).format(d);
 }
 
 function methodLabel(method: string) {
@@ -523,7 +509,7 @@ export function CashPageClient({
                 <div className="grid gap-2 sm:grid-cols-2">
                   <div className="rounded-xl border border-primary/20 bg-background/80 p-3">
                     <div className="text-xs text-muted-foreground">Apertura</div>
-                    <div className="font-medium">{formatArDateTime(openRegister.opened_at)}</div>
+                    <div className="font-medium">{formatArgentinaDateTime(openRegister.opened_at)}</div>
                     <div className="mt-1 text-sm text-muted-foreground">Monto inicial: {moneyAr(openingAmount)}</div>
                     {openRegister.shift_start_at || openRegister.shift_end_at ? (
                       <div className="mt-1 text-sm text-muted-foreground">
@@ -671,7 +657,7 @@ export function CashPageClient({
               ) : (
                 ledgerRows.map((row) => (
                   <tr key={`${row.kind}-${row.id}`} className="border-b last:border-b-0 hover:bg-primary/5 group">
-                    <td className="px-4 py-3 text-muted-foreground">{formatArDateTime(row.created_at)}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{formatArgentinaDateTime(row.created_at)}</td>
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center gap-1.5">
                         {row.kind === "cc_sale" ? (
@@ -1144,8 +1130,8 @@ export function CashPageClient({
                             <div>
                               <div className="font-medium">Turno #{turn.id.slice(0, 8)}</div>
                               <div className="text-xs text-muted-foreground">
-                                Apertura: {formatArDateTime(turn.opened_at)}
-                                {turn.closed_at ? ` · Cierre: ${formatArDateTime(turn.closed_at)}` : " · Abierto"}
+                                Apertura: {formatArgentinaDateTime(turn.opened_at)}
+                                {turn.closed_at ? ` · Cierre: ${formatArgentinaDateTime(turn.closed_at)}` : " · Abierto"}
                               </div>
                             </div>
                             <div
@@ -1214,8 +1200,8 @@ export function CashPageClient({
                     Detalle de turno #{historyDetailTurn.id.slice(0, 8)}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    Apertura: {formatArDateTime(historyDetailTurn.opened_at)}
-                    {historyDetailTurn.closed_at ? ` · Cierre: ${formatArDateTime(historyDetailTurn.closed_at)}` : " · Abierto"}
+                    Apertura: {formatArgentinaDateTime(historyDetailTurn.opened_at)}
+                    {historyDetailTurn.closed_at ? ` · Cierre: ${formatArgentinaDateTime(historyDetailTurn.closed_at)}` : " · Abierto"}
                   </div>
                 </div>
                 <Button type="button" variant="ghost" size="icon" onClick={() => setHistoryDetailTurn(null)}>

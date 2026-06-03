@@ -7,6 +7,7 @@ import { Banknote, CreditCard, Landmark, NotebookPen, Wallet } from "lucide-reac
 import { SalesRowActions } from "@/app/app/(main)/sales/sales-row-actions";
 import { SalesFilter } from "@/app/app/(main)/sales/sales-filter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatArgentinaDateTime, getArgentinaDayRangeUtcIso } from "@/lib/argentina-time";
 import { createClient } from "@/lib/supabase/server";
 import { effectiveSalePaymentMethod } from "@/lib/sale-payment-method-display";
 
@@ -85,21 +86,6 @@ function expandSalesRows(sales: SaleRow[]): DisplaySaleRow[] {
   return out;
 }
 
-function formatArDateTime(iso: string) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat("es-AR", {
-    timeZone: "America/Argentina/Buenos_Aires",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).format(d);
-}
-
 function moneyAr(value: string | number) {
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n)) return `$${value}`;
@@ -173,12 +159,8 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
     .eq("business_id", businessId);
 
   if (filterDate) {
-    const start = new Date(filterDate);
-    // Adjustment for Argentina Timezone if needed, but ISO should work if DB is UTC
-    // Let's use start/end of day in UTC based on the provided date string
-    const startOfDay = `${filterDate}T00:00:00.000Z`;
-    const endOfDay = `${filterDate}T23:59:59.999Z`;
-    query = query.gte("created_at", startOfDay).lt("created_at", endOfDay);
+    const { startIso, endExclusiveIso } = getArgentinaDayRangeUtcIso(filterDate);
+    query = query.gte("created_at", startIso).lt("created_at", endExclusiveIso);
   }
 
   const { data } = await query.order("created_at", { ascending: false }).limit(filterDate ? 1000 : 100);
@@ -270,7 +252,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
                       <td className="px-4 py-3">
                         <div className="font-medium">Venta #{s.id.slice(0, 8)}</div>
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground">{formatArDateTime(s.created_at)}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{formatArgentinaDateTime(s.created_at)}</td>
                       <td className="px-4 py-3">
                         <span
                           className={

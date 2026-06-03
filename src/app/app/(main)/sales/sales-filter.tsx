@@ -8,6 +8,7 @@ import { es } from "date-fns/locale";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { toArgentinaDateForExport } from "@/lib/argentina-time";
 import { exportToExcel } from "@/lib/excel-utils";
 
 type Props = {
@@ -26,6 +27,7 @@ export function SalesFilter({ sales }: Props) {
   const fmtDateTime = React.useMemo(
     () =>
       new Intl.DateTimeFormat("es-AR", {
+        timeZone: "America/Argentina/Buenos_Aires",
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
@@ -90,7 +92,7 @@ export function SalesFilter({ sales }: Props) {
   const handleExport = () => {
     const reportData = sales.map(s => ({
       "N° Ticket": String(s.id ?? "").slice(0, 8),
-      Fecha: s.created_at ? fmtDateTime.format(new Date(s.created_at)) : "",
+      Fecha: s.created_at ? fmtDateTime.format(toArgentinaDateForExport(s.created_at)) : "",
       "Medio de pago": methodLabel(s.payment_method),
       Estado: statusLabel(s.status),
       Total: fmtMoney.format(Number(s.total) || 0),

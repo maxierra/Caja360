@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { AlertTriangle, Banknote, CreditCard, Landmark, Receipt, ShoppingCart, TrendingUp, Wallet } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
+import { formatArgentinaShortDate, getArgentinaDayRangeUtcIso, nextArgentinaDateYmd } from "@/lib/argentina-time";
 import { isMissingOnboardingColumnError } from "@/lib/onboarding-column";
 import { DateSelector } from "./date-selector";
 
@@ -62,16 +63,6 @@ function moneyAr(value: number) {
     currency: "ARS",
     maximumFractionDigits: 2,
   }).format(value);
-}
-
-function fmtDateShort(iso: string) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat("es-AR", {
-    timeZone: "America/Argentina/Buenos_Aires",
-    day: "2-digit",
-    month: "2-digit",
-  }).format(d);
 }
 
 function splitFromDetails(details: unknown): Array<{ method: string; amount: number }> {
@@ -147,14 +138,9 @@ export default async function AppHomePage(props: { searchParams: Promise<{ date?
   }
 
   const dateParam = searchParams.date;
-  const now = dateParam ? new Date(`${dateParam}T12:00:00`) : new Date();
-  const todayStart = new Date(now);
-  todayStart.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(todayStart);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-
-  const trendStart = new Date(todayStart);
-  trendStart.setDate(trendStart.getDate() - 6);
+  const { ymd: selectedYmd, startIso: todayStartIso, endExclusiveIso: tomorrowIso } = getArgentinaDayRangeUtcIso(dateParam);
+  const trendStartYmd = nextArgentinaDateYmd(selectedYmd, -6);
+  const { startIso: trendStartIso } = getArgentinaDayRangeUtcIso(trendStartYmd);
 
   const [{ data: todaySalesData }, { data: trendSalesData }, { data: todayItemsData }, { data: productsData }, { data: openRegisterData }, { data: capTodayData }] =
     await Promise.all([
@@ -162,20 +148,20 @@ export default async function AppHomePage(props: { searchParams: Promise<{ date?
       .from("sales")
       .select("id,total,payment_method,payment_details,status,created_at")
       .eq("business_id", businessId)
-      .gte("created_at", todayStart.toISOString())
-      .lt("created_at", tomorrow.toISOString()),
+      .gte("created_at", todayStartIso)
+      .lt("created_at", tomorrowIso),
     supabase
       .from("sales")
       .select("id,total,payment_method,payment_details,status,created_at")
       .eq("business_id", businessId)
-      .gte("created_at", trendStart.toISOString())
-      .lt("created_at", tomorrow.toISOString()),
+      .gte("created_at", trendStartIso)
+      .lt("created_at", tomorrowIso),
     supabase
       .from("sale_items")
       .select("id,sale_id,name,quantity,total,unit_price,product_id,created_at")
       .eq("business_id", businessId)
-      .gte("created_at", todayStart.toISOString())
-      .lt("created_at", tomorrow.toISOString()),
+      .gte("created_at", todayStartIso)
+      .lt("created_at", tomorrowIso),
     supabase
       .from("products")
       .select("id,name,stock,stock_decimal,sold_by_weight,low_stock_threshold,low_stock_threshold_decimal,active")
@@ -194,8 +180,8 @@ export default async function AppHomePage(props: { searchParams: Promise<{ date?
       .from("customer_account_payments")
       .select("amount")
       .eq("business_id", businessId)
-      .gte("created_at", todayStart.toISOString())
-      .lt("created_at", tomorrow.toISOString()),
+      .gte("created_at", todayStartIso)
+      .lt("created_at", tomorrowIso),
   ]);
 
   const todaySales = ((todaySalesData ?? []) as SaleRow[]).filter((s) => s.status === "paid");
@@ -222,9 +208,7 @@ export default async function AppHomePage(props: { searchParams: Promise<{ date?
 
   const salesByDay = new Map<string, number>();
   for (let i = 0; i < 7; i++) {
-    const d = new Date(trendStart);
-    d.setDate(trendStart.getDate() + i);
-    const key = d.toISOString().slice(0, 10);
+    const key = nextArgentinaDateYmd(trendStartYmd, i);
     salesByDay.set(key, 0);
   }
   for (const s of trendSales) {
@@ -406,7 +390,7 @@ export default async function AppHomePage(props: { searchParams: Promise<{ date?
                       style={{ height: `${h}px`, minHeight: "8px" }}
                     />
                   </div>
-                  <div className="text-[10px] text-muted-foreground">{fmtDateShort(p.date)}</div>
+                  <div className="text-[10px] text-muted-foreground">{formatArgentinaShortDate(p.date)}</div>
                 </div>
               );
             })}
@@ -495,7 +479,7 @@ export default async function AppHomePage(props: { searchParams: Promise<{ date?
             <div className="grid gap-2 text-sm">
               <div className="rounded-lg bg-primary/5 px-3 py-2">
                 <div className="text-xs text-muted-foreground">Apertura</div>
-                <div className="font-medium">{fmtDateShort(openRegister.opened_at)}</div>
+                <div className="font-medium">{formatArgentinaShortDate(openRegister.opened_at)}</div>
               </div>
               <div className="flex items-center justify-between rounded-lg bg-emerald-500/10 px-3 py-2">
                 <span>Efectivo esperado</span>

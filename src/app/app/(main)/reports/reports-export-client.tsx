@@ -4,6 +4,7 @@ import * as React from "react";
 import { FileSpreadsheet } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { toArgentinaDateForExport } from "@/lib/argentina-time";
 import { exportStyledWorkbook } from "@/lib/excel-utils";
 
 export type ReportsExportPayload = {
@@ -47,7 +48,7 @@ export function ReportsExportButton({ data }: { data: ReportsExportPayload }) {
     ];
 
     const salesRows = data.sales.map((s) => ({
-      "Fecha y hora": new Date(s.created_at),
+      "Fecha y hora": toArgentinaDateForExport(s.created_at),
       "Importe venta": s.total,
       "ID venta": s.id,
     }));

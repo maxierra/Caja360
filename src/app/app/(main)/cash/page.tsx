@@ -5,6 +5,7 @@ import { CashPageClient } from "@/app/app/(main)/cash/cash-page-client";
 import { CashFilter } from "@/app/app/(main)/cash/cash-filter";
 import { parseOnboardingGuideStep } from "@/app/app/(main)/onboarding/onboarding-guide-constants";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatArgentinaDateTime, getArgentinaDayRangeUtcIso } from "@/lib/argentina-time";
 import { isMissingOnboardingColumnError } from "@/lib/onboarding-column";
 import { createClient } from "@/lib/supabase/server";
 import { effectiveSalePaymentMethod } from "@/lib/sale-payment-method-display";
@@ -62,38 +63,6 @@ type CustomerPaymentRow = {
 function toNum(value: number | string | null | undefined) {
   const n = typeof value === "number" ? value : Number(value ?? 0);
   return Number.isFinite(n) ? n : 0;
-}
-
-function formatArDateTime(iso: string) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat("es-AR", {
-    timeZone: "America/Argentina/Buenos_Aires",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).format(d);
-}
-
-function arDateRangeUtcIso(filterDate?: string) {
-  const now = new Date();
-  const ymd =
-    filterDate && /^\d{4}-\d{2}-\d{2}$/.test(filterDate)
-      ? filterDate
-      : new Intl.DateTimeFormat("en-CA", {
-          timeZone: "America/Argentina/Buenos_Aires",
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-        }).format(now);
-  return {
-    startIso: `${ymd}T00:00:00-03:00`,
-    endIso: `${ymd}T23:59:59.999-03:00`,
-  };
 }
 
 function expandSaleTotalsByMethod(sales: SaleRow[]) {
@@ -234,7 +203,7 @@ export default async function CashPage({ searchParams }: { searchParams: Promise
 
   const openRegister = (openData as CashRegisterRow | null) ?? null;
 
-  const { startIso: dayStartIso, endIso: dayEndIso } = arDateRangeUtcIso(filterDate);
+  const { startIso: dayStartIso, endInclusiveIso: dayEndIso } = getArgentinaDayRangeUtcIso(filterDate);
 
   let sales: SaleRow[] = [];
   let movements: CashMovementRow[] = [];
@@ -323,7 +292,7 @@ export default async function CashPage({ searchParams }: { searchParams: Promise
   };
   const registerTitle = openRegister ? "Caja abierta" : "Caja cerrada";
   const registerDescription = openRegister
-    ? `Abierta el ${formatArDateTime(openRegister.opened_at)}`
+    ? `Abierta el ${formatArgentinaDateTime(openRegister.opened_at)}`
     : "No hay una caja abierta. Podés abrir una nueva para comenzar a operar.";
 
   // Fetch items for the sales in ledgerRows to show in tickets
