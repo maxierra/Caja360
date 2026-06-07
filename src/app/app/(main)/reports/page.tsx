@@ -9,11 +9,17 @@ import {
 } from "lucide-react";
 
 import { createFixedExpense, deleteFixedExpense, updateFixedExpense } from "@/app/app/(main)/reports/actions";
+import {
+  ProductPerformanceClient,
+  type ProductPerformancePayload,
+  type ProductPerformanceRow,
+  type ProductWithoutSalesRow,
+} from "@/app/app/(main)/reports/product-performance-client";
 import { ReportsExportButton } from "@/app/app/(main)/reports/reports-export-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getArgentinaDayRangeUtcIso } from "@/lib/argentina-time";
+import { getArgentinaDayRangeUtcIso, nextArgentinaDateYmd } from "@/lib/argentina-time";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +33,7 @@ type SaleRow = {
 type SaleItemRow = {
   sale_id: string;
   product_id: string | null;
+  name?: string;
   quantity: number | string;
   total: number | string;
   created_at: string;
@@ -37,6 +44,12 @@ type ProductCostRow = {
   cost: number | string;
 };
 
+type ProductListRow = {
+  id: string;
+  name: string;
+  active: boolean;
+};
+
 type FixedExpenseRow = {
   id: string;
   name: string;
@@ -44,6 +57,16 @@ type FixedExpenseRow = {
   frequency: "daily" | "weekly" | "monthly";
   category: string | null;
   active: boolean;
+};
+
+type CostLoadResult = {
+  rows: ProductCostRow[];
+  errorMessage: string | null;
+};
+
+type SaleItemsLoadResult = {
+  rows: SaleItemRow[];
+  errorMessage: string | null;
 };
 
 function toNum(v: number | string | null | undefined) {
@@ -69,13 +92,6 @@ function periodLabel(monthKey: string) {
   return new Intl.DateTimeFormat("es-AR", { month: "long", year: "numeric" }).format(d);
 }
 
-function dailyRate(expense: FixedExpenseRow) {
-  const amount = toNum(expense.amount);
-  if (expense.frequency === "daily") return amount;
-  if (expense.frequency === "weekly") return amount / 7;
-  return amount / 30;
-}
-
 function fixedExpenseForPeriod(expense: FixedExpenseRow, days: number) {
   const amount = toNum(expense.amount);
   if (expense.frequency === "daily") return amount * days;
@@ -89,6 +105,218 @@ function translateFrequency(f: FixedExpenseRow["frequency"]) {
   if (f === "daily") return "diario";
   if (f === "weekly") return "semanal";
   return "mensual";
+}
+
+function chunkArray<T>(items: T[], size: number) {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
+async function loadProductCostsChunked(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  uniqueProductIds: string[]
+): Promise<CostLoadResult> {
+  if (uniqueProductIds.length === 0) {
+    return { rows: [], errorMessage: null };
+  }
+
+  const rows: ProductCostRow[] = [];
+  const chunks = chunkArray(uniqueProductIds, 100);
+
+  for (const ids of chunks) {
+    const { data, error } = await supabase.from("products").select("id,cost").in("id", ids);
+    if (error) {
+      return {
+        rows: [],
+        errorMessage: `No se pudo calcular el costo de mercadería completo (${error.message}).`,
+      };
+    }
+    rows.push(...((data ?? []) as ProductCostRow[]));
+  }
+
+  return { rows, errorMessage: null };
+}
+
+async function loadSaleItemsChunked(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  businessId: string,
+  saleIds: string[],
+  selectClause: string
+): Promise<SaleItemsLoadResult> {
+  if (saleIds.length === 0) {
+    return { rows: [], errorMessage: null };
+  }
+
+  const rows: SaleItemRow[] = [];
+  const chunks = chunkArray(saleIds, 100);
+
+  for (const ids of chunks) {
+    const { data, error } = await supabase
+      .from("sale_items")
+      .select(selectClause)
+      .eq("business_id", businessId)
+      .in("sale_id", ids);
+
+    if (error) {
+      return {
+        rows: [],
+        errorMessage: `No se pudieron cargar los productos vendidos del período (${error.message}).`,
+      };
+    }
+
+    rows.push(...((data ?? []) as unknown as SaleItemRow[]));
+  }
+
+  return { rows, errorMessage: null };
+}
+
+function getMonthStartYmd(ymd: string) {
+  return `${ymd.slice(0, 7)}-01`;
+}
+
+function getNextMonthStartYmd(ymd: string) {
+  const [year, month] = ymd.slice(0, 7).split("-").map(Number);
+  if (!year || !month) return ymd;
+  if (month === 12) return `${String(year + 1).padStart(4, "0")}-01-01`;
+  return `${String(year).padStart(4, "0")}-${String(month + 1).padStart(2, "0")}-01`;
+}
+
+function getWeekStartYmd(ymd: string) {
+  const [year, month, day] = ymd.split("-").map(Number);
+  const date = new Date(Date.UTC(year, (month || 1) - 1, day || 1, 12, 0, 0, 0));
+  const weekday = date.getUTCDay();
+  const offset = weekday === 0 ? 6 : weekday - 1;
+  return nextArgentinaDateYmd(ymd, -offset);
+}
+
+function getProductPeriodConfig(period: "day" | "week" | "month", anchorDate: string) {
+  if (period === "week") {
+    const startYmd = getWeekStartYmd(anchorDate);
+    const endYmd = nextArgentinaDateYmd(startYmd, 7);
+    return {
+      startYmd,
+      endYmd,
+      startIso: `${startYmd}T00:00:00-03:00`,
+      endIso: `${endYmd}T00:00:00-03:00`,
+      title: `Semana del ${startYmd} al ${nextArgentinaDateYmd(endYmd, -1)}`,
+    };
+  }
+
+  if (period === "month") {
+    const startYmd = getMonthStartYmd(anchorDate);
+    const endYmd = getNextMonthStartYmd(anchorDate);
+    return {
+      startYmd,
+      endYmd,
+      startIso: `${startYmd}T00:00:00-03:00`,
+      endIso: `${endYmd}T00:00:00-03:00`,
+      title: new Intl.DateTimeFormat("es-AR", { month: "long", year: "numeric" }).format(
+        new Date(`${startYmd}T12:00:00-03:00`)
+      ),
+    };
+  }
+
+  const { ymd, startIso, endExclusiveIso } = getArgentinaDayRangeUtcIso(anchorDate);
+  return {
+    startYmd: ymd,
+    endYmd: nextArgentinaDateYmd(ymd, 1),
+    startIso,
+    endIso: endExclusiveIso,
+    title: `Día ${ymd}`,
+  };
+}
+
+function buildProductPerformance(
+  items: SaleItemRow[],
+  products: ProductListRow[],
+  periodTitle: string,
+  period: "day" | "week" | "month",
+  metric: "quantity" | "revenue",
+  anchorDate: string,
+  startIso: string,
+  endIso: string
+): ProductPerformancePayload {
+  const aggregated = new Map<
+    string,
+    { key: string; name: string; quantity: number; revenue: number; saleIds: Set<string> }
+  >();
+
+  for (const item of items) {
+    const key = item.product_id ? `product:${item.product_id}` : `name:${String(item.name ?? "Producto sin nombre")}`;
+    const existing = aggregated.get(key);
+    const quantity = toNum(item.quantity);
+    const revenue = toNum(item.total);
+
+    if (!existing) {
+      aggregated.set(key, {
+        key,
+        name: String((item as SaleItemRow & { name?: string }).name ?? "Producto sin nombre"),
+        quantity,
+        revenue,
+        saleIds: new Set([item.sale_id]),
+      });
+      continue;
+    }
+
+    existing.quantity += quantity;
+    existing.revenue += revenue;
+    existing.saleIds.add(item.sale_id);
+  }
+
+  const totalRevenue = items.reduce((acc, item) => acc + toNum(item.total), 0);
+  const totalUnits = items.reduce((acc, item) => acc + toNum(item.quantity), 0);
+  const valueSelector = (row: { quantity: number; revenue: number }) => (metric === "quantity" ? row.quantity : row.revenue);
+
+  const rows: ProductPerformanceRow[] = Array.from(aggregated.values()).map((row) => ({
+    key: row.key,
+    name: row.name,
+    quantity: row.quantity,
+    revenue: row.revenue,
+    salesCount: row.saleIds.size,
+    averagePerSale: row.saleIds.size > 0 ? row.revenue / row.saleIds.size : 0,
+    share: totalRevenue > 0 ? (row.revenue / totalRevenue) * 100 : 0,
+  }));
+
+  rows.sort((a, b) => {
+    const diff = valueSelector(b) - valueSelector(a);
+    if (Math.abs(diff) > 0.0001) return diff;
+    return b.revenue - a.revenue || a.name.localeCompare(b.name, "es");
+  });
+
+  const lowRows = [...rows].sort((a, b) => {
+    const diff = valueSelector(a) - valueSelector(b);
+    if (Math.abs(diff) > 0.0001) return diff;
+    return a.revenue - b.revenue || a.name.localeCompare(b.name, "es");
+  });
+
+  const soldProductIds = new Set(
+    items.map((item) => item.product_id).filter((value): value is string => Boolean(value))
+  );
+
+  const noSalesProducts: ProductWithoutSalesRow[] = products
+    .filter((product) => product.active && !soldProductIds.has(product.id))
+    .map((product) => ({ id: product.id, name: product.name }))
+    .sort((a, b) => a.name.localeCompare(b.name, "es"));
+
+  return {
+    period,
+    metric,
+    anchorDate,
+    periodTitle,
+    startIso,
+    endIso,
+    totalProductsSold: rows.length,
+    totalUnits,
+    totalRevenue,
+    topProductName: rows[0]?.name ?? null,
+    lowProductName: lowRows[0]?.name ?? null,
+    topProducts: rows,
+    lowProducts: lowRows,
+    noSalesProducts,
+  };
 }
 
 function SpeedometerGauge({
@@ -169,7 +397,12 @@ function SpeedometerGauge({
 export default async function ReportsPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ month?: string }>;
+  searchParams?: Promise<{
+    month?: string;
+    productsPeriod?: string;
+    productsDate?: string;
+    productsMetric?: string;
+  }>;
 }) {
   const sp = (await searchParams) ?? {};
   const currentArYmd = getArgentinaDayRangeUtcIso().ymd;
@@ -207,9 +440,19 @@ export default async function ReportsPage({
       : `${String(selYear).padStart(4, "0")}-${String((selMonth || 1) + 1).padStart(2, "0")}-01`;
   const { startIso: periodStartIso } = getArgentinaDayRangeUtcIso(monthStartYmd);
   const { startIso: periodEndIso } = getArgentinaDayRangeUtcIso(nextMonthYmd);
+  const productsPeriod =
+    sp.productsPeriod === "day" || sp.productsPeriod === "week" || sp.productsPeriod === "month"
+      ? sp.productsPeriod
+      : "day";
+  const productsMetric = sp.productsMetric === "revenue" ? "revenue" : "quantity";
+  const productsAnchorDate =
+    typeof sp.productsDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(sp.productsDate)
+      ? sp.productsDate
+      : currentArYmd;
+  const productPeriodConfig = getProductPeriodConfig(productsPeriod, productsAnchorDate);
 
   const supabase = await createClient();
-  const [{ data: salesData }, { data: fixedExpensesData }] = await Promise.all([
+  const [{ data: salesData }, { data: fixedExpensesData }, { data: productSalesData }, { data: productsListData }] = await Promise.all([
     supabase
       .from("sales")
       .select("id,total,status,created_at")
@@ -222,26 +465,57 @@ export default async function ReportsPage({
       .eq("business_id", businessId)
       .eq("active", true)
       .order("created_at", { ascending: false }),
+    supabase
+      .from("sales")
+      .select("id,status")
+      .eq("business_id", businessId)
+      .eq("status", "paid")
+      .gte("created_at", productPeriodConfig.startIso)
+      .lt("created_at", productPeriodConfig.endIso),
+    supabase
+      .from("products")
+      .select("id,name,active")
+      .eq("business_id", businessId)
+      .eq("active", true)
+      .order("name", { ascending: true }),
   ]);
 
   const sales = (salesData ?? []) as SaleRow[];
   const paidSales = sales.filter((s) => s.status === "paid");
   const paidSaleIds = paidSales.map((s) => s.id);
-  const { data: itemsData } = paidSaleIds.length
-    ? await supabase
-        .from("sale_items")
-        .select("sale_id,product_id,quantity,total,created_at")
-        .eq("business_id", businessId)
-        .in("sale_id", paidSaleIds)
-    : { data: [] };
-  const items = (itemsData ?? []) as SaleItemRow[];
+  const { rows: items, errorMessage: itemsLoadError } = await loadSaleItemsChunked(
+    supabase,
+    businessId,
+    paidSaleIds,
+    "sale_id,product_id,quantity,total,created_at"
+  );
   const fixedExpenses = (fixedExpensesData ?? []) as FixedExpenseRow[];
+  const productSales = (productSalesData ?? []) as Array<{ id: string; status: string }>;
+  const productsList = (productsListData ?? []) as ProductListRow[];
+
+  const productPaidSaleIds = productSales.map((sale) => sale.id);
+  const { rows: productItems, errorMessage: productItemsLoadError } = await loadSaleItemsChunked(
+    supabase,
+    businessId,
+    productPaidSaleIds,
+    "sale_id,product_id,name,quantity,total,created_at"
+  );
+  const productPerformance = buildProductPerformance(
+    productItems,
+    productsList,
+    productPeriodConfig.title,
+    productsPeriod,
+    productsMetric,
+    productsAnchorDate,
+    productPeriodConfig.startIso,
+    productPeriodConfig.endIso
+  );
 
   const uniqueProductIds = Array.from(new Set(items.map((x) => x.product_id).filter(Boolean))) as string[];
-  const { data: productsCostData } = uniqueProductIds.length
-    ? await supabase.from("products").select("id,cost").in("id", uniqueProductIds)
-    : { data: [] };
-  const productsCost = (productsCostData ?? []) as ProductCostRow[];
+  const { rows: productsCost, errorMessage: costLoadError } = await loadProductCostsChunked(
+    supabase,
+    uniqueProductIds
+  );
   const costMap = new Map(productsCost.map((p) => [p.id, toNum(p.cost)]));
 
   const revenue = paidSales.reduce((acc, s) => acc + toNum(s.total), 0);
@@ -310,6 +584,83 @@ export default async function ReportsPage({
             <Label htmlFor="month" className="text-xs text-muted-foreground">Mes</Label>
             <Input id="month" name="month" type="month" defaultValue={selectedMonth} className="h-9 w-44" />
             <button className="h-9 rounded-lg border px-3 text-sm">Ver</button>
+          </form>
+        </div>
+      </div>
+
+      {costLoadError ? (
+        <div className="mt-4 rounded-2xl border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <p className="font-medium">No se pudo calcular correctamente el costo de mercadería</p>
+          <p className="mt-1 text-destructive/90">
+            {costLoadError} Revisá este período nuevamente o intentá con un rango más corto mientras seguimos mejorando este reporte.
+          </p>
+        </div>
+      ) : null}
+
+      {itemsLoadError ? (
+        <div className="mt-4 rounded-2xl border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <p className="font-medium">No se pudo cargar el detalle de ventas para este período</p>
+          <p className="mt-1 text-destructive/90">
+            {itemsLoadError} Sin ese detalle, el costo de mercadería puede verse en cero.
+          </p>
+        </div>
+      ) : null}
+
+      {productItemsLoadError ? (
+        <div className="mt-4 rounded-2xl border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <p className="font-medium">No se pudo cargar el ranking completo de productos</p>
+          <p className="mt-1 text-destructive/90">
+            {productItemsLoadError} Probá con un período más corto si necesitás revisar solo productos vendidos.
+          </p>
+        </div>
+      ) : null}
+
+      <div className="mt-4 rounded-2xl border bg-card p-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-1">
+            <div className="text-sm font-medium">Consulta de productos vendidos</div>
+            <div className="text-xs text-muted-foreground">
+              Elegí período y fecha base. El ranking arranca en top 10, pero lo podés expandir.
+            </div>
+          </div>
+          <form method="get" className="flex flex-wrap items-end gap-3">
+            <input type="hidden" name="month" value={selectedMonth} />
+            <div className="grid gap-1">
+              <Label htmlFor="productsPeriod" className="text-xs text-muted-foreground">Período</Label>
+              <select
+                id="productsPeriod"
+                name="productsPeriod"
+                defaultValue={productsPeriod}
+                className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+              >
+                <option value="day">Día</option>
+                <option value="week">Semana</option>
+                <option value="month">Mes</option>
+              </select>
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="productsDate" className="text-xs text-muted-foreground">Fecha base</Label>
+              <Input
+                id="productsDate"
+                name="productsDate"
+                type="date"
+                defaultValue={productsAnchorDate}
+                className="h-9 w-44"
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="productsMetric" className="text-xs text-muted-foreground">Ordenar por</Label>
+              <select
+                id="productsMetric"
+                name="productsMetric"
+                defaultValue={productsMetric}
+                className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+              >
+                <option value="quantity">Cantidad</option>
+                <option value="revenue">Facturación</option>
+              </select>
+            </div>
+            <button className="h-9 rounded-lg border px-3 text-sm">Consultar</button>
           </form>
         </div>
       </div>
@@ -403,6 +754,8 @@ export default async function ReportsPage({
           </CardContent>
         </Card>
       </div>
+
+      <ProductPerformanceClient data={productPerformance} />
 
       <div className="mt-6 grid gap-4 xl:grid-cols-3">
         <Card className="xl:col-span-2">
