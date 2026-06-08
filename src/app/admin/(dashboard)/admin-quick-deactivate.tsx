@@ -51,7 +51,7 @@ export function AdminQuickDeactivateButton({ businessId, compact = false }: Prop
       variant="outline"
       title="Desactivar acceso al POS"
       className={cn(
-        "shrink-0 border-destructive/50 text-destructive hover:bg-destructive/10",
+        "shrink-0 border border-destructive/50 bg-destructive text-white hover:bg-destructive/90 dark:text-white",
         compact ? "size-7 p-0" : "h-8 gap-1.5 rounded-lg"
       )}
       disabled={loading}

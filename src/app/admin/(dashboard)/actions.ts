@@ -20,6 +20,10 @@ export type AdminActivateResult =
   | { error: "forbidden" | "invalid_uuid" | "not_found" | "config"; message?: string }
   | { ok: true; current_period_end: string };
 
+export type AdminGrantFreeAccessResult =
+  | { error: "forbidden" | "invalid_uuid" | "not_found" | "config"; message?: string }
+  | { ok: true };
+
 async function adminActivateSubscriptionImpl(businessId: string): Promise<AdminActivateResult> {
   const adminEmail = await getPlatformAdminSessionEmail();
   if (!adminEmail) return { error: "forbidden" };
@@ -101,6 +105,57 @@ async function adminActivateSubscriptionImpl(businessId: string): Promise<AdminA
   revalidatePath("/app");
 
   return { ok: true, current_period_end: end.toISOString() };
+}
+
+async function adminGrantFreeAccessImpl(businessId: string): Promise<AdminGrantFreeAccessResult> {
+  const adminEmail = await getPlatformAdminSessionEmail();
+  if (!adminEmail) return { error: "forbidden" };
+
+  const id = businessId.trim();
+  if (!UUID_RE.test(id)) return { error: "invalid_uuid" };
+
+  let admin;
+  try {
+    admin = createAdminClient();
+  } catch {
+    return { error: "config", message: "Falta SUPABASE_SERVICE_ROLE_KEY en el servidor." };
+  }
+
+  const { data: biz, error: bErr } = await admin.from("businesses").select("id").eq("id", id).maybeSingle();
+  if (bErr) return { error: "config", message: bErr.message };
+  if (!biz) return { error: "not_found" };
+
+  const now = new Date().toISOString();
+  const payload = {
+    status: "active" as const,
+    current_period_start: now,
+    current_period_end: null,
+    provider: "free_admin",
+    updated_at: now,
+  };
+
+  const { data: existing } = await admin.from("subscriptions").select("id").eq("business_id", id).maybeSingle();
+
+  if (existing?.id) {
+    const { error: uErr } = await admin
+      .from("subscriptions")
+      .update(payload)
+      .eq("business_id", id);
+    if (uErr) return { error: "config", message: uErr.message };
+  } else {
+    const { error: iErr } = await admin.from("subscriptions").insert({
+      business_id: id,
+      plan_id: "standard",
+      ...payload,
+    });
+    if (iErr) return { error: "config", message: iErr.message };
+  }
+
+  revalidatePath("/app/admin");
+  revalidatePath("/app/subscription");
+  revalidatePath("/app");
+
+  return { ok: true };
 }
 
 export type AdminDeactivateResult =
@@ -241,6 +296,10 @@ async function adminResetUserPasswordImpl(
 export const adminActivateSubscription = createMonitoredAction(
   adminActivateSubscriptionImpl,
   "admin/activateSubscription",
+);
+export const adminGrantFreeAccess = createMonitoredAction(
+  adminGrantFreeAccessImpl,
+  "admin/grantFreeAccess",
 );
 export const adminDeactivateSubscription = createMonitoredAction(
   adminDeactivateSubscriptionImpl,

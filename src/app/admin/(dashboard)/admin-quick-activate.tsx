@@ -55,7 +55,7 @@ export function AdminQuickActivateButton({ businessId, billingDays, compact = fa
       variant="default"
       title={`Activar ${billingDays} días (pago manual)`}
       className={cn(
-        "shrink-0 gap-1 rounded-md bg-emerald-600 text-white hover:bg-emerald-700",
+        "shrink-0 gap-1 rounded-md border border-emerald-500/50 bg-emerald-600 text-white hover:bg-emerald-700",
         compact ? "h-7 px-2 text-[11px]" : "h-8 gap-1.5 rounded-lg"
       )}
       disabled={loading}

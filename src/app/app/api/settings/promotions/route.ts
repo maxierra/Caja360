@@ -4,6 +4,83 @@ import { createClient } from "@/lib/supabase/server";
 import { buildPaymentLabelMap } from "@/lib/business-payment-methods";
 
 type PromotionKind = "ticket_amount" | "ticket_quantity" | "product_quantity";
+type PromotionTargetMode = "products" | "categories";
+type PromotionRuleProductRow = {
+  product_id: string | null;
+  products:
+    | {
+        name: string | null;
+        barcode: string | null;
+        sku: string | null;
+        category: string | null;
+      }
+    | Array<{
+        name: string | null;
+        barcode: string | null;
+        sku: string | null;
+        category: string | null;
+      }>
+    | null;
+};
+type PromotionRuleRecord = {
+  id: string;
+  name: string | null;
+  kind: PromotionKind;
+  target_mode: PromotionTargetMode | null;
+  category_filters: string[] | null;
+  discount_percent: number | null;
+  amount_min: number | null;
+  amount_max: number | null;
+  quantity_min: number | null;
+  payment_methods: string[] | null;
+  active: boolean | null;
+  valid_from: string | null;
+  valid_until: string | null;
+  days_of_week: string[] | null;
+  time_start: string | null;
+  time_end: string | null;
+  promotion_rule_products: PromotionRuleProductRow[] | null;
+};
+type PaymentMethodRecord = Parameters<typeof buildPaymentLabelMap>[0][number];
+type ProductCategoryRow = { category: string | null };
+type PromotionPayload = {
+  business_id: string;
+  name: string;
+  kind: PromotionKind;
+  target_mode: PromotionTargetMode;
+  category_filters: string[] | null;
+  discount_percent: number;
+  active: boolean;
+  payment_methods: string[] | null;
+  amount_min?: number | null;
+  amount_max?: number | null;
+  quantity_min?: number | null;
+  valid_from?: string | null;
+  valid_until?: string | null;
+  days_of_week?: string[] | null;
+  time_start?: string | null;
+  time_end?: string | null;
+};
+
+function normalizeCategory(value: unknown) {
+  return String(value ?? "").trim();
+}
+
+function normalizeCategories(values: unknown) {
+  if (!Array.isArray(values)) return [];
+  return Array.from(new Set(values.map(normalizeCategory).filter(Boolean)));
+}
+
+function normalizePromotionProduct(row: PromotionRuleProductRow) {
+  const related = Array.isArray(row.products) ? row.products[0] ?? null : row.products;
+  return {
+    id: String(row.product_id),
+    name: related?.name ? String(related.name) : null,
+    barcode: related?.barcode ? String(related.barcode) : null,
+    sku: related?.sku ? String(related.sku) : null,
+    category: related?.category ? String(related.category) : null,
+  };
+}
 
 export async function GET() {
   const supabase = await createClient();
@@ -21,7 +98,7 @@ export async function GET() {
   const { data: promos, error } = await supabase
     .from("promotion_rules")
     .select(
-      "id,name,kind,discount_percent,amount_min,amount_max,quantity_min,active,payment_methods,valid_from,valid_until,days_of_week,time_start,time_end,promotion_rule_products(product_id,products(name,barcode))"
+      "id,name,kind,target_mode,category_filters,discount_percent,amount_min,amount_max,quantity_min,active,payment_methods,valid_from,valid_until,days_of_week,time_start,time_end,promotion_rule_products(product_id,products(name,barcode,sku,category))"
     )
     .eq("business_id", businessId)
     .order("priority", { ascending: true })
@@ -36,13 +113,26 @@ export async function GET() {
     .select("id,business_id,method_code,label,icon_key,icon_url,is_active,sort_order")
     .eq("business_id", businessId);
 
-  const paymentMethodLabels = buildPaymentLabelMap((pmRows ?? []) as any);
+  const { data: categoriesRows } = await supabase
+    .from("products")
+    .select("category")
+    .eq("business_id", businessId)
+    .not("category", "is", null)
+    .order("category", { ascending: true })
+    .limit(1000);
+
+  const paymentMethodLabels = buildPaymentLabelMap((pmRows ?? []) as PaymentMethodRecord[]);
+  const availableCategories = Array.from(
+    new Set(((categoriesRows ?? []) as ProductCategoryRow[]).map((row) => normalizeCategory(row.category)).filter(Boolean))
+  );
 
   const rows =
-    (promos ?? []).map((r: any) => ({
+    ((promos ?? []) as PromotionRuleRecord[]).map((r) => ({
       id: String(r.id),
       name: String(r.name ?? ""),
       kind: r.kind as PromotionKind,
+      target_mode: (r.target_mode as PromotionTargetMode | null) ?? "products",
+      categories: normalizeCategories(r.category_filters),
       discount_percent: Number(r.discount_percent ?? 0),
       amount_min: r.amount_min != null ? Number(r.amount_min) : null,
       amount_max: r.amount_max != null ? Number(r.amount_max) : null,
@@ -56,15 +146,11 @@ export async function GET() {
       time_end: r.time_end ?? null,
       products:
         Array.isArray(r.promotion_rule_products) && r.promotion_rule_products.length
-          ? (r.promotion_rule_products as any[]).map((p) => ({
-              id: String(p.product_id),
-              name: p.products?.name ? String(p.products.name) : null,
-              barcode: p.products?.barcode ? String(p.products.barcode) : null,
-            }))
+          ? r.promotion_rule_products.map(normalizePromotionProduct)
           : [],
     })) ?? [];
 
-  return NextResponse.json({ rows, paymentMethodLabels });
+  return NextResponse.json({ rows, paymentMethodLabels, availableCategories });
 }
 
 export async function POST(request: Request) {
@@ -72,6 +158,8 @@ export async function POST(request: Request) {
     id?: string;
     name?: string;
     kind?: PromotionKind;
+    target_mode?: PromotionTargetMode;
+    categories?: string[] | null;
     discount_percent?: number;
     amount_min?: number | null;
     amount_max?: number | null;
@@ -83,7 +171,7 @@ export async function POST(request: Request) {
     days_of_week?: string[] | null;
     time_start?: string | null;
     time_end?: string | null;
-    products?: { id: string; name?: string | null; barcode?: string | null }[];
+    products?: { id: string; name?: string | null; barcode?: string | null; sku?: string | null; category?: string | null }[];
   };
 
   const supabase = await createClient();
@@ -100,6 +188,8 @@ export async function POST(request: Request) {
 
   const name = String(body.name ?? "").trim();
   const kind: PromotionKind = body.kind ?? "ticket_amount";
+  const targetMode: PromotionTargetMode = body.target_mode === "categories" ? "categories" : "products";
+  const categoryFilters = normalizeCategories(body.categories);
   const discount = Number(body.discount_percent ?? 0);
 
   if (!name) {
@@ -109,10 +199,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "El porcentaje debe estar entre 0 y 100" }, { status: 400 });
   }
 
-  const payload: any = {
+  const payload: PromotionPayload = {
     business_id: businessId,
     name,
     kind,
+    target_mode: targetMode,
+    category_filters: kind === "product_quantity" && targetMode === "categories" && categoryFilters.length ? categoryFilters : null,
     discount_percent: discount,
     active: body.active ?? true,
     payment_methods: body.payment_methods && body.payment_methods.length ? body.payment_methods : null,
@@ -162,9 +254,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const ruleId = String((upserted as any).id);
+  const ruleId = String((upserted as { id: string }).id);
 
-  if (kind === "product_quantity") {
+  if (kind === "product_quantity" && targetMode === "products") {
     const products = Array.isArray(body.products) ? body.products : [];
     const uniqueIds = Array.from(new Set(products.map((p) => p.id).filter(Boolean)));
 
@@ -181,7 +273,7 @@ export async function POST(request: Request) {
   const refetch = await supabase
     .from("promotion_rules")
     .select(
-      "id,name,kind,discount_percent,amount_min,amount_max,quantity_min,active,payment_methods,valid_from,valid_until,days_of_week,time_start,time_end,promotion_rule_products(product_id,products(name,barcode))"
+      "id,name,kind,target_mode,category_filters,discount_percent,amount_min,amount_max,quantity_min,active,payment_methods,valid_from,valid_until,days_of_week,time_start,time_end,promotion_rule_products(product_id,products(name,barcode,sku,category))"
     )
     .eq("id", ruleId)
     .maybeSingle();
@@ -190,12 +282,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: refetch.error?.message ?? "No se pudo recargar la promoción" }, { status: 500 });
   }
 
-  const r: any = refetch.data;
+  const r = refetch.data as PromotionRuleRecord;
 
   const normalized = {
     id: String(r.id),
     name: String(r.name ?? ""),
     kind: r.kind as PromotionKind,
+    target_mode: (r.target_mode as PromotionTargetMode | null) ?? "products",
+    categories: normalizeCategories(r.category_filters),
     discount_percent: Number(r.discount_percent ?? 0),
     amount_min: r.amount_min != null ? Number(r.amount_min) : null,
     amount_max: r.amount_max != null ? Number(r.amount_max) : null,
@@ -209,11 +303,7 @@ export async function POST(request: Request) {
     time_end: r.time_end ?? null,
     products:
       Array.isArray(r.promotion_rule_products) && r.promotion_rule_products.length
-        ? (r.promotion_rule_products as any[]).map((p) => ({
-            id: String(p.product_id),
-            name: p.products?.name ? String(p.products.name) : null,
-            barcode: p.products?.barcode ? String(p.products.barcode) : null,
-          }))
+        ? r.promotion_rule_products.map(normalizePromotionProduct)
         : [],
   };
 
@@ -252,5 +342,3 @@ export async function DELETE(request: Request) {
 
   return NextResponse.json({ ok: true });
 }
-
-

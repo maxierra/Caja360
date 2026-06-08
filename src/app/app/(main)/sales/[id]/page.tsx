@@ -43,6 +43,18 @@ type SaleRow = {
   payment_details?: unknown;
 };
 
+type SalePromotionDetails = {
+  name?: string;
+  percent?: number;
+  amount?: number;
+  total_before?: number;
+  total_after?: number;
+};
+type MembershipRow = {
+  role?: string | null;
+  permissions?: Record<string, unknown> | null;
+};
+
 type SaleItemRow = {
   id: string;
   name: string;
@@ -104,6 +116,10 @@ export default async function SaleDetailPage({ params }: Props) {
   }
 
   const sale = saleData as SaleRow;
+  const promotion =
+    sale.payment_details && typeof sale.payment_details === "object"
+      ? (((sale.payment_details as Record<string, unknown>).promotion as SalePromotionDetails | undefined) ?? null)
+      : null;
 
   const { data: itemsData } = await supabase
     .from("sale_items")
@@ -123,8 +139,9 @@ export default async function SaleDetailPage({ params }: Props) {
       .eq("business_id", businessId)
       .is("deleted_at", null)
       .maybeSingle();
-    const role = (membership as any)?.role as string | null;
-    const perms = ((membership as any)?.permissions ?? {}) as Record<string, unknown>;
+    const membershipRow = membership as MembershipRow | null;
+    const role = membershipRow?.role ?? null;
+    const perms = membershipRow?.permissions ?? {};
     canVoid = canVoid && (role === "owner" || perms.sales_void === true);
   }
 
@@ -155,6 +172,29 @@ export default async function SaleDetailPage({ params }: Props) {
             <div className="font-numeric text-lg font-semibold">{moneyAr(sale.total)}</div>
           </div>
         </div>
+
+        {promotion && Number(promotion.amount ?? 0) > 0 ? (
+          <div className="border-b bg-emerald-500/5 px-5 py-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+                  Promoción aplicada
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {promotion.name ?? "Descuento"} {promotion.percent ? `(${Number(promotion.percent).toFixed(2)}%)` : ""}
+                </div>
+              </div>
+              <div className="text-right text-sm">
+                {promotion.total_before != null ? (
+                  <div className="text-muted-foreground">Subtotal: {moneyAr(promotion.total_before)}</div>
+                ) : null}
+                <div className="font-medium text-emerald-700 dark:text-emerald-300">
+                  Descuento: -{moneyAr(Number(promotion.amount ?? 0))}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <div className="overflow-auto">
           <table className="w-full min-w-[720px] text-sm">

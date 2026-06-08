@@ -30,6 +30,7 @@ export type AdminSubscriptionListItem = {
   billingSummary:
     | "mp_automatico"
     | "manual_admin"
+    | "free_admin"
     | "solo_prueba"
     | "sin_pagos_registrados"
     | "suspendido_admin";
@@ -41,6 +42,7 @@ function billingSummaryFromRow(
   last: AdminLastPayment | null
 ): AdminSubscriptionListItem["billingSummary"] {
   if (sub.provider === "admin_suspended") return "suspendido_admin";
+  if (sub.provider === "free_admin") return "free_admin";
   if (sub.status === "trialing") return "solo_prueba";
   if (last?.status === "approved" && last.provider === "manual_transfer") return "manual_admin";
   if (last?.status === "approved" && last.provider === "mercadopago") return "mp_automatico";

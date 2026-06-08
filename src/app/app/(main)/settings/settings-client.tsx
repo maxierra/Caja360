@@ -285,7 +285,7 @@ export function SettingsClient({
           icon={Percent}
           title="Promociones y descuentos"
           description="Reglas automáticas de descuentos."
-          hint="Por monto, cantidad o producto."
+          hint="Por monto, cantidad, producto o categoría."
           tooltip="Definí promociones por monto de ticket, cantidad total o cantidad de producto, filtradas por medios de pago y horarios."
           onClick={() => setPromosOpen(true)}
         />
@@ -334,7 +334,7 @@ export function SettingsClient({
       <ModalShell
         open={promosOpen}
         title="Promociones y descuentos"
-        description="Configurá reglas de descuento por monto de ticket, cantidad total o cantidad por producto. Se aplican automáticamente en el punto de venta."
+        description="Configurá reglas de descuento por monto de ticket, cantidad total o cantidad por producto/categoría. Se aplican automáticamente en el punto de venta."
         onClose={() => setPromosOpen(false)}
         maxWidthClass="max-w-[1320px]"
         accent="amber"

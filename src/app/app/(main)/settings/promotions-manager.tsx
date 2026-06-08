@@ -10,17 +10,22 @@ import { Label } from "@/components/ui/label";
 import type { PosPaymentMethodCode } from "@/lib/business-payment-methods";
 
 type PromotionKind = "ticket_amount" | "ticket_quantity" | "product_quantity";
+type PromotionTargetMode = "products" | "categories";
 
 type PromotionProduct = {
   id: string;
   name: string | null;
   barcode: string | null;
+  sku: string | null;
+  category: string | null;
 };
 
 type PromotionRuleRow = {
   id: string;
   name: string;
   kind: PromotionKind;
+  target_mode: PromotionTargetMode;
+  categories: string[];
   discount_percent: number;
   amount_min: number | null;
   amount_max: number | null;
@@ -40,21 +45,28 @@ type PromotionsListResponse =
   | {
       rows: PromotionRuleRow[];
       paymentMethodLabels: Record<string, string>;
+      availableCategories: string[];
     };
 
 export function PromotionsManager() {
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [rows, setRows] = React.useState<PromotionRuleRow[]>([]);
+  const [availableCategories, setAvailableCategories] = React.useState<string[]>([]);
   const [paymentLabels, setPaymentLabels] = React.useState<Record<string, string>>({});
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [deleting, setDeleting] = React.useState(false);
+  const [productSearch, setProductSearch] = React.useState("");
+  const [productLookupLoading, setProductLookupLoading] = React.useState(false);
+  const [productResults, setProductResults] = React.useState<PromotionProduct[]>([]);
 
   const emptyRow: PromotionRuleRow = {
     id: "",
     name: "",
     kind: "ticket_amount",
+    target_mode: "products",
+    categories: [],
     discount_percent: 0,
     amount_min: 0,
     amount_max: null,
@@ -84,7 +96,8 @@ export function PromotionsManager() {
           return;
         }
         if (ignore) return;
-      setRows(json.rows);
+        setRows(json.rows);
+        setAvailableCategories(json.availableCategories ?? []);
         setPaymentLabels(json.paymentMethodLabels);
       } catch (e) {
         if (!ignore) setError(e instanceof Error ? e.message : "Error de red");
@@ -104,6 +117,9 @@ export function PromotionsManager() {
       ...prev,
       { ...emptyRow, id: tempId },
     ]);
+    setProductSearch("");
+    setProductResults([]);
+    setError(null);
     setSelectedId(tempId);
   };
 
@@ -111,12 +127,68 @@ export function PromotionsManager() {
     setRows((prev) => prev.map((r) => (r.id === (selected?.id ?? "") ? { ...r, ...patch } : r)));
   };
 
+  const addProductToSelected = React.useCallback((product: PromotionProduct) => {
+    if (!selected) return;
+    setRows((prev) =>
+      prev.map((r) =>
+        r.id === selected.id
+          ? {
+              ...r,
+              products: r.products.some((p) => p.id === product.id) ? r.products : [...r.products, product],
+            }
+          : r
+      )
+    );
+    setProductSearch("");
+    setProductResults([]);
+    setError(null);
+  }, [selected]);
+
+  const runProductLookup = React.useCallback(async (rawValue: string) => {
+    const value = rawValue.trim();
+    if (!value) {
+      setProductResults([]);
+      return;
+    }
+
+    setProductLookupLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/app/api/settings/promotions/product-lookup?code=${encodeURIComponent(value)}`);
+      const json = (await res.json()) as {
+        results?: PromotionProduct[];
+        error?: string;
+      };
+      if (!res.ok) {
+        setProductResults([]);
+        setError(json.error ?? "No se encontró el producto.");
+        return;
+      }
+      setProductResults(Array.isArray(json.results) ? json.results : []);
+    } catch (err) {
+      setProductResults([]);
+      setError(err instanceof Error ? err.message : "Error al buscar producto.");
+    } finally {
+      setProductLookupLoading(false);
+    }
+  }, []);
+
   const onToggleActive = (id: string, value: boolean) => {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, active: value } : r)));
   };
 
   const onSave = async () => {
     if (!selected) return;
+    if (selected.kind === "product_quantity") {
+      if (selected.target_mode === "products" && selected.products.length === 0) {
+        setError("Agregá al menos un producto para esta promoción.");
+        return;
+      }
+      if (selected.target_mode === "categories" && selected.categories.length === 0) {
+        setError("Elegí al menos una categoría para esta promoción.");
+        return;
+      }
+    }
     setSaving(true);
     setError(null);
     try {
@@ -201,7 +273,12 @@ export function PromotionsManager() {
                     "flex cursor-pointer items-center gap-3 px-3 py-2.5 transition-colors hover:bg-muted/60",
                     selectedId === r.id && "bg-muted/80"
                   )}
-                  onClick={() => setSelectedId(r.id)}
+                  onClick={() => {
+                    setProductSearch("");
+                    setProductResults([]);
+                    setError(null);
+                    setSelectedId(r.id);
+                  }}
                 >
                   <div className="flex flex-1 flex-col gap-0.5">
                     <div className="flex items-center gap-2">
@@ -235,9 +312,9 @@ export function PromotionsManager() {
                         <>
                           Desde <strong>{r.quantity_min ?? 0}</strong> unidades de{" "}
                           <strong>
-                            {r.products[0]?.name ??
-                              r.products[0]?.barcode ??
-                              "producto"}
+                            {r.target_mode === "categories"
+                              ? r.categories[0] ?? "categoría"
+                              : r.products[0]?.name ?? r.products[0]?.barcode ?? "producto"}
                           </strong>
                         </>
                       )}
@@ -303,10 +380,13 @@ export function PromotionsManager() {
                     const v = e.target.value as PromotionKind;
                     updateSelected({
                       kind: v,
+                      target_mode: v === "product_quantity" ? selected.target_mode : "products",
                       amount_min: v === "ticket_amount" ? selected.amount_min ?? 0 : null,
                       amount_max: v === "ticket_amount" ? selected.amount_max : null,
                       quantity_min:
                         v === "ticket_quantity" || v === "product_quantity" ? selected.quantity_min ?? 1 : null,
+                      categories: v === "product_quantity" ? selected.categories : [],
+                      products: v === "product_quantity" ? selected.products : [],
                     });
                   }}
                 >
@@ -362,90 +442,148 @@ export function PromotionsManager() {
               )}
 
               {selected.kind === "product_quantity" && (
-                <div className="grid gap-2">
-                  <div className="grid gap-1.5">
-                    <Label htmlFor="promo-product-scan">Productos incluidos</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        id="promo-product-scan"
-                        placeholder="Escaneá código de barras o escribí y presioná Enter"
-                        onKeyDown={async (e) => {
-                          if (e.key !== "Enter") return;
-                          e.preventDefault();
-                          const value = (e.currentTarget.value ?? "").trim();
-                          if (!value) return;
-                          try {
-                            const res = await fetch(
-                              `/app/api/settings/promotions/product-lookup?code=${encodeURIComponent(value)}`
-                            );
-                            const json = (await res.json()) as {
-                              id?: string;
-                              name?: string;
-                              barcode?: string;
-                              error?: string;
-                            };
-                            if (!res.ok || !json.id) {
-                              setError(json.error ?? "No se encontró el producto para ese código.");
-                              return;
-                            }
-                            const productId = json.id as string;
-                            setRows((prev) =>
-                              prev.map((r) =>
-                                r.id === selected.id
-                                  ? {
-                                      ...r,
-                                      products: r.products.some((p) => p.id === productId)
-                                        ? r.products
-                                        : [
-                                            ...r.products,
-                                            {
-                                              id: productId,
-                                              name: json.name ?? null,
-                                              barcode: json.barcode ?? null,
-                                            },
-                                          ],
-                                    }
-                                  : r
-                              )
-                            );
-                            e.currentTarget.value = "";
-                          } catch (err) {
-                            setError(err instanceof Error ? err.message : "Error al buscar producto.");
-                          }
-                        }}
-                      />
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      Escaneá uno o varios productos para que reciban esta promoción cuando alcancen la cantidad mínima.
-                    </p>
+                <div className="grid gap-3 md:col-span-2">
+                  <div className="grid gap-1.5 md:max-w-xs">
+                    <Label htmlFor="promo-target-mode">Aplica sobre</Label>
+                    <select
+                      id="promo-target-mode"
+                      className="h-9 w-full rounded-md border border-input bg-background px-2.5 text-sm shadow-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+                      value={selected.target_mode}
+                      onChange={(e) =>
+                        updateSelected({
+                          target_mode: e.target.value === "categories" ? "categories" : "products",
+                        })
+                      }
+                    >
+                      <option value="products">Productos específicos</option>
+                      <option value="categories">Categorías</option>
+                    </select>
                   </div>
 
-                  {selected.products.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5">
-                      {selected.products.map((p) => (
-                        <button
-                          key={p.id}
-                          type="button"
-                          className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[11px]"
-                          onClick={() =>
-                            setRows((prev) =>
-                              prev.map((r) =>
-                                r.id === selected.id ? { ...r, products: r.products.filter((x) => x.id !== p.id) } : r
-                              )
-                            )
-                          }
-                          title={p.barcode ?? undefined}
-                        >
-                          <Tag className="size-3" />
-                          <span className="max-w-[140px] truncate">{p.name ?? p.barcode ?? p.id}</span>
-                          <span className="ml-0.5 text-xs text-muted-foreground/80">×</span>
-                        </button>
-                      ))}
+                  {selected.target_mode === "products" ? (
+                    <div className="grid gap-2">
+                      <div className="grid gap-1.5">
+                        <Label htmlFor="promo-product-search">Productos incluidos</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            id="promo-product-search"
+                            value={productSearch}
+                            placeholder="Nombre, código de barras o código interno"
+                            onChange={(e) => setProductSearch(e.target.value)}
+                            onKeyDown={async (e) => {
+                              if (e.key !== "Enter") return;
+                              e.preventDefault();
+                              await runProductLookup(productSearch);
+                            }}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => void runProductLookup(productSearch)}
+                            disabled={productLookupLoading || !productSearch.trim()}
+                          >
+                            {productLookupLoading ? "Buscando..." : "Buscar"}
+                          </Button>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          Buscá por nombre, barcode o código interno y elegí el producto correcto de la lista.
+                        </p>
+                      </div>
+
+                      {productResults.length > 0 ? (
+                        <div className="rounded-xl border border-border/70 bg-muted/20">
+                          <div className="border-b border-border/60 px-3 py-2 text-[11px] font-medium text-muted-foreground">
+                            Coincidencias
+                          </div>
+                          <div className="divide-y divide-border/60">
+                            {productResults.map((product) => (
+                              <div key={product.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                                <div className="min-w-0">
+                                  <div className="truncate text-sm font-medium">{product.name ?? "Producto sin nombre"}</div>
+                                  <div className="text-[11px] text-muted-foreground">
+                                    {[product.category, product.sku ? `Cod: ${product.sku}` : null, product.barcode ? `EAN: ${product.barcode}` : null]
+                                      .filter(Boolean)
+                                      .join(" · ")}
+                                  </div>
+                                </div>
+                                <Button type="button" size="sm" variant="outline" onClick={() => addProductToSelected(product)}>
+                                  Agregar
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {selected.products.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {selected.products.map((p) => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/60 px-2 py-0.5 text-[11px]"
+                              onClick={() =>
+                                setRows((prev) =>
+                                  prev.map((r) =>
+                                    r.id === selected.id ? { ...r, products: r.products.filter((x) => x.id !== p.id) } : r
+                                  )
+                                )
+                              }
+                              title={p.barcode ?? p.sku ?? undefined}
+                            >
+                              <Tag className="size-3" />
+                              <span className="max-w-[180px] truncate">{p.name ?? p.barcode ?? p.sku ?? p.id}</span>
+                              <span className="ml-0.5 text-xs text-muted-foreground/80">×</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-muted-foreground">
+                          Todavía no agregaste productos. Esta promo se va a aplicar solo a los que selecciones acá.
+                        </p>
+                      )}
                     </div>
                   ) : (
-                    <p className="text-[11px] text-muted-foreground">
-                      Todavía no agregaste productos. Podés escanear varios códigos para incluirlos en la misma promoción.
-                    </p>
+                    <div className="grid gap-2">
+                      <div className="grid gap-1.5">
+                        <Label>Categorías incluidas</Label>
+                        <div className="flex flex-wrap gap-2">
+                          {availableCategories.length > 0 ? (
+                            availableCategories.map((category) => {
+                              const checked = selected.categories.includes(category);
+                              return (
+                                <button
+                                  key={category}
+                                  type="button"
+                                  className={cn(
+                                    "rounded-full border px-3 py-1 text-xs transition-colors",
+                                    checked
+                                      ? "border-amber-500/60 bg-amber-500/10 text-amber-800 dark:text-amber-200"
+                                      : "border-border bg-background text-muted-foreground hover:bg-muted/40"
+                                  )}
+                                  onClick={() =>
+                                    updateSelected({
+                                      categories: checked
+                                        ? selected.categories.filter((item) => item !== category)
+                                        : [...selected.categories, category],
+                                    })
+                                  }
+                                >
+                                  {category}
+                                </button>
+                              );
+                            })
+                          ) : (
+                            <p className="text-[11px] text-muted-foreground">
+                              Todavía no hay categorías cargadas en productos para este negocio.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        El descuento se va a calcular solo sobre los productos del ticket que pertenezcan a las categorías elegidas.
+                      </p>
+                    </div>
                   )}
                 </div>
               )}
@@ -671,4 +809,3 @@ export function PromotionsManager() {
     </div>
   );
 }
-

@@ -19,10 +19,25 @@ type AppliedPromotion = {
   discountPercent: number;
   discountAmount: number;
   kind: "ticket_amount" | "ticket_quantity" | "product_quantity";
+  targetMode?: "products" | "categories";
 } | null;
+type PosSupabaseClient = Awaited<ReturnType<typeof createClient>>;
+type CheckoutPaymentDetails = {
+  split?: Array<{ method: "cash" | "card" | "transfer" | "mercadopago" | "cuenta_corriente"; amount: number }>;
+  cash_received?: number;
+  promotion?: {
+    rule_id: string;
+    name: string;
+    target_mode: "products" | "categories" | null;
+    percent: number;
+    amount: number;
+    total_before: number;
+    total_after: number;
+  };
+};
 
 async function evaluatePromotionForCart(params: {
-  supabase: any;
+  supabase: PosSupabaseClient;
   businessId: string;
   items: CheckoutItem[];
   payment_method: "cash" | "card" | "transfer" | "mercadopago" | "cuenta_corriente" | "mixed";
@@ -36,6 +51,8 @@ async function evaluatePromotionForCart(params: {
     id: string;
     name: string;
     kind: "ticket_amount" | "ticket_quantity" | "product_quantity";
+    target_mode: "products" | "categories" | null;
+    category_filters: string[] | null;
     discount_percent: number;
     amount_min: number | null;
     amount_max: number | null;
@@ -53,6 +70,17 @@ async function evaluatePromotionForCart(params: {
   let appliedPromotion: AppliedPromotion = null;
 
   try {
+    const itemProductIds = Array.from(new Set(items.map((item) => item.product_id).filter(Boolean)));
+    const { data: productRows } = itemProductIds.length
+      ? await supabase.from("products").select("id,category").eq("business_id", businessId).in("id", itemProductIds)
+      : { data: [] as Array<{ id: string; category: string | null }> };
+    const categoryByProductId = new Map(
+      ((productRows ?? []) as Array<{ id: string; category: string | null }>).map((row) => [
+        String(row.id),
+        String(row.category ?? "").trim().toLowerCase(),
+      ])
+    );
+
     const now = new Date();
     const nowMs = now.getTime();
 
@@ -84,7 +112,7 @@ async function evaluatePromotionForCart(params: {
     const { data: rawRules, error: rulesErr } = await supabase
       .from("promotion_rules")
       .select(
-        "id,name,kind,discount_percent,amount_min,amount_max,quantity_min,active,payment_methods,valid_from,valid_until,days_of_week,time_start,time_end,promotion_rule_products(product_id)"
+        "id,name,kind,target_mode,category_filters,discount_percent,amount_min,amount_max,quantity_min,active,payment_methods,valid_from,valid_until,days_of_week,time_start,time_end,promotion_rule_products(product_id)"
       )
       .eq("business_id", businessId)
       .eq("active", true)
@@ -129,14 +157,23 @@ async function evaluatePromotionForCart(params: {
             if (totalQuantity < qMin) continue;
           } else if (r.kind === "product_quantity") {
             const qMin = r.quantity_min ?? 1;
+            const targetMode = r.target_mode === "categories" ? "categories" : "products";
             const allowedProducts = (r.promotion_rule_products ?? [])
               .map((p) => p.product_id)
               .filter((id): id is string => !!id);
-            if (!allowedProducts.length) continue;
-            const match = items.find(
-              (it) => allowedProducts.includes(it.product_id) && it.quantity >= qMin
+            const allowedCategories = (r.category_filters ?? [])
+              .map((category) => String(category ?? "").trim().toLowerCase())
+              .filter(Boolean);
+
+            const matchingItems = items.filter((it) =>
+              targetMode === "categories"
+                ? allowedCategories.includes(categoryByProductId.get(it.product_id) ?? "")
+                : allowedProducts.includes(it.product_id)
             );
-            if (!match) continue;
+            if (!matchingItems.length) continue;
+
+            const matchingQty = matchingItems.reduce((sum, it) => sum + it.quantity, 0);
+            if (matchingQty < qMin) continue;
           }
 
           const percent = Math.max(0, Math.min(100, Number(r.discount_percent ?? 0)));
@@ -145,12 +182,20 @@ async function evaluatePromotionForCart(params: {
           const base =
             r.kind === "product_quantity"
               ? items
-                  .filter((it) =>
-                    (r.promotion_rule_products ?? [])
+                  .filter((it) => {
+                    const targetMode = r.target_mode === "categories" ? "categories" : "products";
+                    if (targetMode === "categories") {
+                      const allowedCategories = (r.category_filters ?? [])
+                        .map((category) => String(category ?? "").trim().toLowerCase())
+                        .filter(Boolean);
+                      return allowedCategories.includes(categoryByProductId.get(it.product_id) ?? "");
+                    }
+
+                    const allowedProducts = (r.promotion_rule_products ?? [])
                       .map((p) => p.product_id)
-                      .filter((id): id is string => !!id)
-                      .includes(it.product_id)
-                  )
+                      .filter((id): id is string => !!id);
+                    return allowedProducts.includes(it.product_id);
+                  })
                   .reduce((sum, it) => sum + it.unit_price * it.quantity, 0)
               : totalBeforeDiscount;
 
@@ -164,6 +209,7 @@ async function evaluatePromotionForCart(params: {
             discountPercent: percent,
             discountAmount,
             kind: r.kind,
+            targetMode: r.target_mode === "categories" ? "categories" : "products",
           } as AppliedPromotion;
         }
         return null;
@@ -229,19 +275,21 @@ async function checkoutSaleImpl(input: {
     payment_method: input.payment_method,
   });
 
+  const basePaymentDetails = (input.payment_details ?? null) as CheckoutPaymentDetails | null;
   const promotionDetails = appliedPromotion
     ? {
-        ...(input.payment_details as any),
+        ...(basePaymentDetails ?? {}),
         promotion: {
           rule_id: appliedPromotion.ruleId,
           name: appliedPromotion.name,
+          target_mode: appliedPromotion.targetMode ?? null,
           percent: appliedPromotion.discountPercent,
           amount: appliedPromotion.discountAmount,
           total_before: totalBeforeDiscount,
           total_after: Math.max(0, Math.round((totalBeforeDiscount - appliedPromotion.discountAmount) * 100) / 100),
         },
       }
-    : (input.payment_details as any);
+    : basePaymentDetails;
 
   const { data, error } = await supabase.rpc("create_sale_with_items", {
     p_business_id: businessId,

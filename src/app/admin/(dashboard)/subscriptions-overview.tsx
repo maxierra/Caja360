@@ -21,6 +21,12 @@ function badgeForSummary(s: AdminSubscriptionListItem["billingSummary"]) {
           Manual (vos)
         </span>
       );
+    case "free_admin":
+      return (
+        <span className="inline-flex rounded-full bg-sky-500/15 px-2 py-0.5 text-[11px] font-semibold text-sky-800 dark:text-sky-200">
+          Gratis (admin)
+        </span>
+      );
     case "solo_prueba":
       return (
         <span className="inline-flex rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-900 dark:text-amber-100">
@@ -54,6 +60,7 @@ function statusLabel(status: string) {
 
 function providerLabel(provider: string) {
   if (provider === "admin_suspended") return "Suspendido (admin)";
+  if (provider === "free_admin") return "Gratis (admin)";
   return provider;
 }
 
@@ -67,6 +74,7 @@ export function AdminSubscriptionsOverview({ rows, billingDays, downloadStats }:
   const sinAcceso = rows.filter((r) => !r.hasAppAccess).length;
   const mpAuto = rows.filter((r) => r.billingSummary === "mp_automatico").length;
   const manual = rows.filter((r) => r.billingSummary === "manual_admin").length;
+  const free = rows.filter((r) => r.billingSummary === "free_admin").length;
   const lastDownload = downloadStats?.lastEventAt
     ? new Date(downloadStats.lastEventAt).toLocaleString("es-AR", {
         timeZone: "America/Argentina/Buenos_Aires",
@@ -92,6 +100,11 @@ export function AdminSubscriptionsOverview({ rows, billingDays, downloadStats }:
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Activado manual</p>
           <p className="mt-1 text-2xl font-bold text-violet-600 dark:text-violet-300">{manual}</p>
           <p className="mt-1 text-xs text-muted-foreground">Transferencia / panel admin</p>
+        </div>
+        <div className="rounded-2xl border border-[var(--pos-border)] bg-[var(--pos-surface)] p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Acceso gratis</p>
+          <p className="mt-1 text-2xl font-bold text-sky-600 dark:text-sky-300">{free}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Cortesía sin vencimiento desde admin</p>
         </div>
         <div className="rounded-2xl border border-[var(--pos-border)] bg-[var(--pos-surface)] p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Descargas instalador</p>
