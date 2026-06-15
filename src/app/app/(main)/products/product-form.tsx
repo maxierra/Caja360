@@ -9,16 +9,22 @@ import { BarcodeScanner } from "@/components/BarcodeScanner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { BusinessType } from "@/lib/business-types";
+import { createClient } from "@/lib/supabase/browser";
 import { generateInternalEan13, INTERNAL_PRODUCT_DEFAULTS } from "@/lib/internal-barcode";
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/browser";
 
 type ProductDefaults = {
   id?: string;
   name?: string;
+  image_path?: string | null;
+  image_url?: string | null;
   barcode?: string | null;
   scale_code?: string | null;
   category?: string | null;
+  variant_group?: string | null;
+  size?: string | null;
+  color?: string | null;
   cost?: number | null;
   price?: number | null;
   expires_at?: string | null;
@@ -33,14 +39,40 @@ type ProductDefaults = {
 type Props = {
   title: string;
   description?: string;
+  businessType?: BusinessType;
   defaults?: ProductDefaults;
   action: (formData: FormData) => void | Promise<void>;
-  /** Si false, el formulario no envuelve en card (modales). */
   container?: boolean;
   canEditPrice?: boolean;
   canEditStock?: boolean;
   submitPulse?: boolean;
 };
+
+type PreloadProduct = {
+  ean: string;
+  name: string;
+  brand: string | null;
+  price_real: number | null;
+  price_offer: number | null;
+  cat1: string | null;
+  cat2: string | null;
+  cat3: string | null;
+};
+
+const FASHION_COLOR_OPTIONS = [
+  { name: "Negro", swatch: "#111111" },
+  { name: "Blanco", swatch: "#f5f5f5" },
+  { name: "Gris", swatch: "#9ca3af" },
+  { name: "Azul", swatch: "#2563eb" },
+  { name: "Celeste", swatch: "#38bdf8" },
+  { name: "Rojo", swatch: "#dc2626" },
+  { name: "Rosa", swatch: "#ec4899" },
+  { name: "Verde", swatch: "#16a34a" },
+  { name: "Beige", swatch: "#d6c2a1" },
+  { name: "Marrón", swatch: "#8b5e3c" },
+  { name: "Camel", swatch: "#c19a6b" },
+  { name: "Bordo", swatch: "#7f1d1d" },
+] as const;
 
 function round2(n: number) {
   return Math.round((n + Number.EPSILON) * 100) / 100;
@@ -58,9 +90,27 @@ function formatNumberLoose(n: number) {
   return String(n);
 }
 
+function splitCommaValues(input: string) {
+  const raw = String(input ?? "").trim();
+  if (!raw) return [];
+  return Array.from(
+    new Set(
+      raw
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+function joinCommaValues(values: string[]) {
+  return values.join(", ");
+}
+
 export function ProductForm({
   title,
   description,
+  businessType = "retail",
   defaults,
   action,
   container = true,
@@ -68,13 +118,23 @@ export function ProductForm({
   canEditStock = true,
   submitPulse = false,
 }: Props) {
+  const isFashion = businessType === "fashion";
+  const isGastronomy = businessType === "gastronomy";
+  const catalogStyle = isFashion || isGastronomy;
+
   const initialCost = defaults?.cost ?? 0;
   const initialPrice = defaults?.price ?? 0;
 
-  const [soldByWeight, setSoldByWeight] = React.useState(Boolean(defaults?.sold_by_weight));
+  const [soldByWeight, setSoldByWeight] = React.useState(Boolean(defaults?.sold_by_weight) && !catalogStyle);
   const [barcodeInput, setBarcodeInput] = React.useState<string>(defaults?.barcode ?? "");
   const [nameInput, setNameInput] = React.useState<string>(defaults?.name ?? "");
   const [categoryInput, setCategoryInput] = React.useState<string>(defaults?.category ?? "");
+  const [sizeInput, setSizeInput] = React.useState<string>(defaults?.size ?? "");
+  const [colorInput, setColorInput] = React.useState<string>(defaults?.color ?? "");
+  const [sizesInput, setSizesInput] = React.useState<string>(defaults?.size ?? "");
+  const [colorsInput, setColorsInput] = React.useState<string>(defaults?.color ?? "");
+  const [selectedColors, setSelectedColors] = React.useState<string[]>(() => splitCommaValues(defaults?.color ?? ""));
+  const [customColorsInput, setCustomColorsInput] = React.useState<string>("");
   const [expiresAtInput, setExpiresAtInput] = React.useState<string>(defaults?.expires_at ?? "");
   const [stockInput, setStockInput] = React.useState<string>(String(defaults?.stock ?? 0));
   const [lowStockThresholdInput, setLowStockThresholdInput] = React.useState<string>(
@@ -90,25 +150,18 @@ export function ProductForm({
     return formatNumberLoose(round2(((initialPrice - initialCost) / initialCost) * 100));
   });
   const [priceInput, setPriceInput] = React.useState<string>(formatNumberLoose(initialPrice));
-  /** En alta, el margen puede arrastrar el precio. En edición, el precio guardado manda (si no, al redondear el % y volver a aplicar costo×(1+margen) se desfasa, ej. 3500 → 3500.1). */
   const [lastEdited, setLastEdited] = React.useState<"margin" | "price">(() => (defaults?.id ? "price" : "margin"));
-
   const [scannerOpen, setScannerOpen] = React.useState(false);
-
+  const [imagePreviewUrl, setImagePreviewUrl] = React.useState<string | null>(defaults?.image_url ?? null);
   const [preloadLoading, setPreloadLoading] = React.useState(false);
-  const [preload, setPreload] = React.useState<
-    | null
-    | {
-        ean: string;
-        name: string;
-        brand: string | null;
-        price_real: number | null;
-        price_offer: number | null;
-        cat1: string | null;
-        cat2: string | null;
-        cat3: string | null;
-      }
-  >(null);
+  const [preload, setPreload] = React.useState<PreloadProduct | null>(null);
+  const lastAutoFilledEanRef = React.useRef<string | null>(null);
+
+  React.useEffect(() => {
+    if (catalogStyle && soldByWeight) {
+      setSoldByWeight(false);
+    }
+  }, [catalogStyle, soldByWeight]);
 
   const preloadSuggestedPrice = React.useMemo(() => {
     if (!preload) return null;
@@ -130,12 +183,8 @@ export function ProductForm({
     return preload.cat3 || preload.cat2 || preload.cat1 || null;
   }, [preload]);
 
-  const lastAutoFilledEanRef = React.useRef<string | null>(null);
-
   React.useEffect(() => {
-    if (!preload) return;
-    if (defaults?.id) return;
-
+    if (!preload || defaults?.id) return;
     if (lastAutoFilledEanRef.current === preload.ean) return;
     lastAutoFilledEanRef.current = preload.ean;
 
@@ -144,41 +193,51 @@ export function ProductForm({
       const baseName = String(preload.name ?? "").trim();
       setNameInput(brand ? `${baseName} - ${brand}` : baseName);
     }
-    if (!categoryInput.trim() && preloadRepresentativeCategory) setCategoryInput(preloadRepresentativeCategory);
 
-    const suggestedPrice = (() => {
-      const offer = preload.price_offer ?? null;
-      const real = preload.price_real ?? null;
-      if (offer && offer > 0) return offer;
-      if (real && real > 0) return real;
-      return null;
-    })();
-
-    if (suggestedPrice != null) {
-      const currentPrice = parseNumberLoose(priceInput);
-      if (!currentPrice) {
-        setLastEdited("price");
-        setPriceInput(formatNumberLoose(suggestedPrice));
-      }
+    if (!categoryInput.trim() && preloadRepresentativeCategory) {
+      setCategoryInput(preloadRepresentativeCategory);
     }
 
-    const farExpiry = "2099-12-31";
-    if (!expiresAtInput) setExpiresAtInput(farExpiry);
+    if (preloadSuggestedPrice != null && !parseNumberLoose(priceInput)) {
+      setLastEdited("price");
+      setPriceInput(formatNumberLoose(preloadSuggestedPrice));
+    }
+
+    if (!catalogStyle && !expiresAtInput) {
+      setExpiresAtInput("2099-12-31");
+    }
 
     if (!soldByWeight) {
-      const currentStock = Number(stockInput);
-      const currentMin = Number(lowStockThresholdInput);
-      if (!currentStock) setStockInput("100");
-      if (!currentMin) setLowStockThresholdInput("50");
+      if (!Number(stockInput)) setStockInput("100");
+      if (!Number(lowStockThresholdInput)) setLowStockThresholdInput("50");
     } else {
-      const currentStock = Number(stockDecimalInput);
-      const currentMin = Number(lowStockThresholdDecimalInput);
-      if (!currentStock) setStockDecimalInput("100");
-      if (!currentMin) setLowStockThresholdDecimalInput("50");
+      if (!Number(stockDecimalInput)) setStockDecimalInput("100");
+      if (!Number(lowStockThresholdDecimalInput)) setLowStockThresholdDecimalInput("50");
     }
-  }, [preload, defaults?.id, soldByWeight]);
+  }, [
+    preload,
+    defaults?.id,
+    nameInput,
+    categoryInput,
+    preloadRepresentativeCategory,
+    preloadSuggestedPrice,
+    priceInput,
+    catalogStyle,
+    expiresAtInput,
+    soldByWeight,
+    stockInput,
+    lowStockThresholdInput,
+    stockDecimalInput,
+    lowStockThresholdDecimalInput,
+  ]);
 
   React.useEffect(() => {
+    if (catalogStyle) {
+      setPreload(null);
+      setPreloadLoading(false);
+      return;
+    }
+
     const ean = barcodeInput.replace(/\s+/g, "").trim();
     if (!ean) {
       setPreload(null);
@@ -191,17 +250,16 @@ export function ProductForm({
           setPreloadLoading(true);
           const supabase = createClient();
 
-          const tryLoad = async (select: string) => {
-            return await supabase.from("preload_products").select(select).eq("ean", ean).limit(1).maybeSingle();
-          };
+          const tryLoad = async (select: string) =>
+            supabase.from("preload_products").select(select).eq("ean", ean).limit(1).maybeSingle();
 
           const first = await tryLoad("ean,name,brand,price_real,price_offer,cat1,cat2,cat3");
           const second = first.error
             ? await tryLoad("ean,producto,brand,precio_real,precio_oferta,cat1,cat2,cat3")
             : { data: null, error: null };
 
-          const data = (first.data ?? second.data) as any;
-          const error = first.error && second.error ? (second.error as any) : null;
+          const data = (first.data ?? second.data) as Record<string, unknown> | null;
+          const error = first.error && second.error ? second.error : null;
 
           if (error || !data) {
             setPreload(null);
@@ -214,7 +272,7 @@ export function ProductForm({
           const priceOffer = data.price_offer ?? data.precio_oferta;
 
           setPreload({
-            ean: String(data.ean),
+            ean: String(data.ean ?? ""),
             name: String(name ?? ""),
             brand: data.brand ? String(data.brand) : null,
             price_real: priceReal != null ? Number(priceReal) : null,
@@ -232,7 +290,7 @@ export function ProductForm({
     }, 250);
 
     return () => window.clearTimeout(t);
-  }, [barcodeInput]);
+  }, [barcodeInput, catalogStyle]);
 
   const cost = React.useMemo(() => parseNumberLoose(costInput), [costInput]);
   const margin = React.useMemo(() => parseNumberLoose(marginInput), [marginInput]);
@@ -240,8 +298,7 @@ export function ProductForm({
 
   React.useEffect(() => {
     if (lastEdited !== "margin") return;
-    const p = round2(cost * (1 + margin / 100));
-    setPriceInput(formatNumberLoose(p));
+    setPriceInput(formatNumberLoose(round2(cost * (1 + margin / 100))));
   }, [cost, margin, lastEdited]);
 
   React.useEffect(() => {
@@ -250,21 +307,110 @@ export function ProductForm({
       setMarginInput("0");
       return;
     }
-    const m = round2(((price - cost) / cost) * 100);
-    setMarginInput(formatNumberLoose(m));
+    setMarginInput(formatNumberLoose(round2(((price - cost) / cost) * 100)));
   }, [cost, price, lastEdited]);
+
+  const generateInternalCode = () => {
+    const code = generateInternalEan13();
+    setBarcodeInput(code);
+    setExpiresAtInput(INTERNAL_PRODUCT_DEFAULTS.expiresAt);
+    if (soldByWeight) {
+      setStockDecimalInput(INTERNAL_PRODUCT_DEFAULTS.stockKg);
+      setLowStockThresholdDecimalInput(INTERNAL_PRODUCT_DEFAULTS.lowStockKg);
+    } else {
+      setStockInput(INTERNAL_PRODUCT_DEFAULTS.stockUnits);
+      setLowStockThresholdInput(INTERNAL_PRODUCT_DEFAULTS.lowStockUnits);
+    }
+    toast.success("Código interno generado");
+  };
+
+  const syncCreateColors = React.useCallback((nextSelectedColors: string[], manualInput: string) => {
+    const merged = Array.from(new Set([...nextSelectedColors, ...splitCommaValues(manualInput)]));
+    setSelectedColors(nextSelectedColors);
+    setColorsInput(joinCommaValues(merged));
+  }, []);
+
+  const toggleFashionColor = React.useCallback(
+    (colorName: string) => {
+      if (defaults?.id) {
+        setColorInput((current) => (current === colorName ? "" : colorName));
+        return;
+      }
+
+      const nextSelectedColors = selectedColors.includes(colorName)
+        ? selectedColors.filter((item) => item !== colorName)
+        : [...selectedColors, colorName];
+      syncCreateColors(nextSelectedColors, customColorsInput);
+    },
+    [customColorsInput, defaults?.id, selectedColors, syncCreateColors]
+  );
+
+  const handleCustomColorsChange = React.useCallback(
+    (value: string) => {
+      setCustomColorsInput(value);
+      syncCreateColors(selectedColors, value);
+    },
+    [selectedColors, syncCreateColors]
+  );
+
+  const isColorSelected = React.useCallback(
+    (colorName: string) => {
+      if (defaults?.id) return colorInput === colorName;
+      return selectedColors.includes(colorName);
+    },
+    [colorInput, defaults?.id, selectedColors]
+  );
+
+  React.useEffect(() => {
+    setImagePreviewUrl(defaults?.image_url ?? null);
+  }, [defaults?.image_url]);
+
+  const handleImageChange = React.useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) {
+        setImagePreviewUrl(defaults?.image_url ?? null);
+        return;
+      }
+
+      const objectUrl = URL.createObjectURL(file);
+      setImagePreviewUrl((current) => {
+        if (current?.startsWith("blob:")) {
+          URL.revokeObjectURL(current);
+        }
+        return objectUrl;
+      });
+    },
+    [defaults?.image_url]
+  );
+
+  React.useEffect(() => {
+    return () => {
+      if (imagePreviewUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(imagePreviewUrl);
+      }
+    };
+  }, [imagePreviewUrl]);
+
+  const catalogHint = isFashion
+    ? "Podés cargar una sola variante o crear varias combinaciones de talle y color en una sola vez."
+    : isGastronomy
+      ? "Primera versión para gastronomía: formulario simple para productos de catálogo, sin foco en balanza ni vencimiento."
+      : null;
 
   const content = (
     <>
       <div className="space-y-1">
         <div className="text-base font-semibold tracking-tight">{title}</div>
         {description ? <div className="text-sm text-muted-foreground">{description}</div> : null}
+        {catalogHint ? <div className="text-sm text-muted-foreground">{catalogHint}</div> : null}
       </div>
 
       <form action={action} className="mt-5 grid gap-4">
         {defaults?.id ? <input type="hidden" name="id" value={defaults.id} /> : null}
+        <input type="hidden" name="business_type" value={businessType} />
 
-        {defaults?.id ? (
+        {defaults?.id && !catalogStyle ? (
           <div className="flex flex-col gap-2 lg:hidden">
             <Button
               type="button"
@@ -283,76 +429,49 @@ export function ProductForm({
 
         <div>
           <div className="grid gap-4 md:grid-cols-3">
-            <div className="grid gap-2 md:col-span-1">
-              <Label htmlFor="barcode">Código de barras</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="barcode"
-                  name="barcode"
-                  value={barcodeInput}
-                  onChange={(e) => setBarcodeInput(e.target.value)}
-                  inputMode="numeric"
-                  autoComplete="off"
-                  placeholder="O escribilo a mano"
-                  className="min-w-0 flex-1"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className="shrink-0"
-                  title={
-                    barcodeInput.trim()
-                      ? "Vacía el campo para generar un EAN interno"
-                      : "Generar EAN interno (sin código de fabricante)"
-                  }
-                  disabled={Boolean(barcodeInput.trim())}
-                  onClick={() => {
-                    const code = generateInternalEan13();
-                    setBarcodeInput(code);
-                    setExpiresAtInput(INTERNAL_PRODUCT_DEFAULTS.expiresAt);
-                    if (soldByWeight) {
-                      setStockDecimalInput(INTERNAL_PRODUCT_DEFAULTS.stockKg);
-                      setLowStockThresholdDecimalInput(INTERNAL_PRODUCT_DEFAULTS.lowStockKg);
-                    } else {
-                      setStockInput(INTERNAL_PRODUCT_DEFAULTS.stockUnits);
-                      setLowStockThresholdInput(INTERNAL_PRODUCT_DEFAULTS.lowStockUnits);
-                    }
-                    toast.success("Código interno generado", {
-                      description: soldByWeight
-                        ? `${code} · Stock ${INTERNAL_PRODUCT_DEFAULTS.stockKg} kg · Mín. ${INTERNAL_PRODUCT_DEFAULTS.lowStockKg} kg · Vto. ${INTERNAL_PRODUCT_DEFAULTS.expiresAt}`
-                        : `${code} · Stock ${INTERNAL_PRODUCT_DEFAULTS.stockUnits} u. · Mín. ${INTERNAL_PRODUCT_DEFAULTS.lowStockUnits} u. · Vto. ${INTERNAL_PRODUCT_DEFAULTS.expiresAt}`,
-                    });
-                  }}
-                >
-                  <Hash className="size-4" />
-                  <span className="sr-only">Generar código interno</span>
-                </Button>
+            {!catalogStyle ? (
+              <div className="grid gap-2 md:col-span-1">
+                <Label htmlFor="barcode">Código de barras</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="barcode"
+                    name="barcode"
+                    value={barcodeInput}
+                    onChange={(e) => setBarcodeInput(e.target.value)}
+                    inputMode="numeric"
+                    autoComplete="off"
+                    placeholder="O escribilo a mano"
+                    className="min-w-0 flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="shrink-0"
+                    title={barcodeInput.trim() ? "Vacía el campo para generar un EAN interno" : "Generar EAN interno"}
+                    disabled={Boolean(barcodeInput.trim())}
+                    onClick={generateInternalCode}
+                  >
+                    <Hash className="size-4" />
+                    <span className="sr-only">Generar código interno</span>
+                  </Button>
+                </div>
+                {preloadLoading ? <p className="text-[11px] text-muted-foreground">Buscando datos en la base...</p> : null}
               </div>
-              {preloadLoading ? (
-                <p className="text-[11px] text-muted-foreground">Buscando datos en la base…</p>
-              ) : null}
-            </div>
+            ) : null}
 
-            <div className="grid gap-2 md:col-span-2">
-              <Label htmlFor="name">Nombre</Label>
+            <div className={cn("grid gap-2", catalogStyle ? "md:col-span-3" : "md:col-span-2")}>
+              <Label htmlFor="name">{isFashion ? "Nombre de la prenda" : isGastronomy ? "Nombre del producto" : "Nombre"}</Label>
               <Input id="name" name="name" value={nameInput} onChange={(e) => setNameInput(e.target.value)} required />
             </div>
           </div>
 
-          {preload && !defaults?.id ? (
-            <div
-              className={cn(
-                "mt-3 rounded-xl border border-emerald-500/35 bg-emerald-500/[0.07] p-3 text-left",
-                "dark:bg-emerald-950/25"
-              )}
-            >
+          {preload && !defaults?.id && !catalogStyle ? (
+            <div className={cn("mt-3 rounded-xl border border-emerald-500/35 bg-emerald-500/[0.07] p-3 text-left", "dark:bg-emerald-950/25")}>
               <div className="text-xs font-semibold text-emerald-800 dark:text-emerald-200">Datos sugeridos</div>
               <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
                 {preloadCategoryPath ? <span className="block">{preloadCategoryPath}</span> : null}
-                {preloadSuggestedPrice != null ? (
-                  <span className="mt-0.5 block">Precio referencia venta: ${preloadSuggestedPrice}</span>
-                ) : null}
+                {preloadSuggestedPrice != null ? <span className="mt-0.5 block">Precio referencia venta: ${preloadSuggestedPrice}</span> : null}
                 <span className="mt-1 block text-emerald-700/90 dark:text-emerald-300/90">
                   Revisá precio de compra y stock abajo antes de guardar.
                 </span>
@@ -361,42 +480,173 @@ export function ProductForm({
           ) : null}
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          <div className="grid gap-2">
-            <Label htmlFor="unit_type">Tipo</Label>
-            <select
-              id="unit_type"
-              name="unit_type"
-              value={soldByWeight ? "weight" : "unit"}
-              onChange={(e) => setSoldByWeight(e.target.value === "weight")}
-              className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-            >
-              <option value="unit">Por unidad</option>
-              <option value="weight">Pesable (por kg)</option>
-            </select>
-            <input type="hidden" name="sold_by_weight" value={soldByWeight ? "on" : "off"} />
-          </div>
+        <div className={cn("grid gap-4", catalogStyle ? "md:grid-cols-2" : "md:grid-cols-3")}>
+          {!catalogStyle ? (
+            <div className="grid gap-2">
+              <Label htmlFor="unit_type">Tipo</Label>
+              <select
+                id="unit_type"
+                name="unit_type"
+                value={soldByWeight ? "weight" : "unit"}
+                onChange={(e) => setSoldByWeight(e.target.value === "weight")}
+                className="h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              >
+                <option value="unit">Por unidad</option>
+                <option value="weight">Pesable (por kg)</option>
+              </select>
+              <input type="hidden" name="sold_by_weight" value={soldByWeight ? "on" : "off"} />
+            </div>
+          ) : (
+            <input type="hidden" name="sold_by_weight" value="off" />
+          )}
 
           <div className="grid gap-2">
-            <Label htmlFor="category">Categoría</Label>
+            <Label htmlFor="category">{catalogStyle ? "Categoría principal" : "Categoría"}</Label>
             <Input id="category" name="category" value={categoryInput} onChange={(e) => setCategoryInput(e.target.value)} />
           </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="scale_code">Código balanza</Label>
-            <Input
-              id="scale_code"
-              name="scale_code"
-              defaultValue={defaults?.scale_code ?? ""}
-              disabled={!soldByWeight}
-              placeholder={soldByWeight ? "Ej: 201" : "Solo para pesables"}
-            />
-          </div>
+          {!catalogStyle ? (
+            <div className="grid gap-2">
+              <Label htmlFor="scale_code">Código balanza</Label>
+              <Input
+                id="scale_code"
+                name="scale_code"
+                defaultValue={defaults?.scale_code ?? ""}
+                disabled={!soldByWeight}
+                placeholder={soldByWeight ? "Ej: 201" : "Solo para pesables"}
+              />
+            </div>
+          ) : null}
         </div>
+
+        <div className="grid gap-2">
+          <Label htmlFor="image_file">Foto del producto</Label>
+          <Input id="image_file" name="image_file" type="file" accept="image/png,image/jpeg,image/webp" onChange={handleImageChange} />
+          <p className="text-[11px] text-muted-foreground">Subí una imagen JPG, PNG o WEBP. Recomendado: hasta 2 MB.</p>
+          {imagePreviewUrl ? (
+            <div className="mt-1 flex items-center gap-3 rounded-xl border border-[var(--pos-border)] p-3">
+              <div className="h-20 w-20 overflow-hidden rounded-xl border bg-[var(--pos-surface-2)]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={imagePreviewUrl} alt="Vista previa del producto" className="h-full w-full object-cover" />
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {defaults?.image_url ? "Si elegís otra imagen, reemplaza la actual." : "Vista previa de la foto a guardar."}
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        {isFashion ? (
+          defaults?.id ? (
+            <>
+              <input type="hidden" name="variant_group" value={defaults.variant_group ?? ""} />
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="size">Talle</Label>
+                  <Input id="size" name="size" value={sizeInput} onChange={(e) => setSizeInput(e.target.value)} placeholder="Ej: S, M, 38" />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="color">Color</Label>
+                  <input type="hidden" name="color" value={colorInput} />
+                  <div className="grid gap-3 rounded-xl border border-[var(--pos-border)] p-3">
+                    <div className="flex flex-wrap gap-2">
+                      {FASHION_COLOR_OPTIONS.map((option) => {
+                        const active = isColorSelected(option.name);
+                        return (
+                          <button
+                            key={option.name}
+                            type="button"
+                            onClick={() => toggleFashionColor(option.name)}
+                            className={cn(
+                              "inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold transition",
+                              active
+                                ? "border-[var(--pos-accent)] bg-[var(--pos-accent)]/10 text-foreground"
+                                : "border-[var(--pos-border)] bg-[var(--pos-surface-2)] text-muted-foreground hover:border-[var(--pos-accent)]/40"
+                            )}
+                          >
+                            <span
+                              className="size-4 rounded-full border border-black/10"
+                              style={{ backgroundColor: option.swatch }}
+                              aria-hidden="true"
+                            />
+                            {option.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <Input
+                      id="color"
+                      value={colorInput}
+                      onChange={(e) => setColorInput(e.target.value)}
+                      placeholder="O escribí un color personalizado"
+                    />
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <input type="hidden" name="variant_group" value={defaults?.variant_group ?? ""} />
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="sizes_input">Talles</Label>
+                  <Input
+                    id="sizes_input"
+                    name="sizes_input"
+                    value={sizesInput}
+                    onChange={(e) => setSizesInput(e.target.value)}
+                    placeholder="Ej: S, M, L, XL"
+                  />
+                  <p className="text-[11px] text-muted-foreground">Separalos con coma. Si lo dejás vacío, crea una sola variante.</p>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="custom_colors_input">Colores</Label>
+                  <input type="hidden" id="colors_input" name="colors_input" value={colorsInput} />
+                  <div className="grid gap-3 rounded-xl border border-[var(--pos-border)] p-3">
+                    <div className="flex flex-wrap gap-2">
+                      {FASHION_COLOR_OPTIONS.map((option) => {
+                        const active = isColorSelected(option.name);
+                        return (
+                          <button
+                            key={option.name}
+                            type="button"
+                            onClick={() => toggleFashionColor(option.name)}
+                            className={cn(
+                              "inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold transition",
+                              active
+                                ? "border-[var(--pos-accent)] bg-[var(--pos-accent)]/10 text-foreground"
+                                : "border-[var(--pos-border)] bg-[var(--pos-surface-2)] text-muted-foreground hover:border-[var(--pos-accent)]/40"
+                            )}
+                          >
+                            <span
+                              className="size-4 rounded-full border border-black/10"
+                              style={{ backgroundColor: option.swatch }}
+                              aria-hidden="true"
+                            />
+                            {option.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <Input
+                      id="custom_colors_input"
+                      value={customColorsInput}
+                      onChange={(e) => handleCustomColorsChange(e.target.value)}
+                      placeholder="Sumar otros colores: Lila, Mostaza, Plateado"
+                    />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Elegí colores rápidos o agregá otros manualmente. El sistema arma todas las combinaciones entre talles y colores.
+                  </p>
+                </div>
+              </div>
+            </>
+          )
+        ) : null}
 
         <div className="grid gap-4 md:grid-cols-3">
           <div className="grid gap-2">
-            <Label htmlFor="cost">Precio compra</Label>
+            <Label htmlFor="cost">{isFashion ? "Costo de compra" : "Precio compra"}</Label>
             <Input
               id="cost"
               name="cost"
@@ -444,29 +694,30 @@ export function ProductForm({
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          <div className="grid gap-2">
-            <Label htmlFor="expires_at">Vencimiento</Label>
-            <Input
-              id="expires_at"
-              name="expires_at"
-              type="date"
-              value={expiresAtInput}
-              onChange={(e) => setExpiresAtInput(e.target.value)}
-            />
-          </div>
+        {!catalogStyle ? (
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-2">
+              <Label htmlFor="expires_at">Vencimiento</Label>
+              <Input
+                id="expires_at"
+                name="expires_at"
+                type="date"
+                value={expiresAtInput}
+                onChange={(e) => setExpiresAtInput(e.target.value)}
+              />
+            </div>
 
+            <div className="flex items-end gap-2">
+              <input id="active" name="active" type="checkbox" defaultChecked={defaults?.active ?? true} className="size-4" />
+              <Label htmlFor="active">Activo</Label>
+            </div>
+          </div>
+        ) : (
           <div className="flex items-end gap-2">
-            <input
-              id="active"
-              name="active"
-              type="checkbox"
-              defaultChecked={defaults?.active ?? true}
-              className="size-4"
-            />
+            <input id="active" name="active" type="checkbox" defaultChecked={defaults?.active ?? true} className="size-4" />
             <Label htmlFor="active">Activo</Label>
           </div>
-        </div>
+        )}
 
         {soldByWeight ? (
           <div className="grid gap-4 md:grid-cols-2">
@@ -500,7 +751,7 @@ export function ProductForm({
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
             <div className="grid gap-2">
-              <Label htmlFor="stock">Stock (unidades)</Label>
+              <Label htmlFor="stock">{catalogStyle ? "Stock inicial" : "Stock (unidades)"}</Label>
               <Input
                 id="stock"
                 name="stock"
@@ -512,7 +763,7 @@ export function ProductForm({
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="low_stock_threshold">Stock mínimo (unidades)</Label>
+              <Label htmlFor="low_stock_threshold">{catalogStyle ? "Stock mínimo" : "Stock mínimo (unidades)"}</Label>
               <Input
                 id="low_stock_threshold"
                 name="low_stock_threshold"
@@ -548,11 +799,7 @@ export function ProductForm({
           const code = raw.replace(/\s+/g, "").trim();
           if (!code) return true;
           setBarcodeInput(code);
-          if (
-            defaults?.id &&
-            typeof window !== "undefined" &&
-            window.matchMedia("(max-width: 1023px)").matches
-          ) {
+          if (defaults?.id && typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches) {
             toast.success("Código leído", {
               description: "Revisá precio de compra, margen y stock.",
               duration: 2800,

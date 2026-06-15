@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Store } from "lucide-react";
+import { LayoutGrid, Store } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -66,10 +66,29 @@ export function SetupForm({ action }: Props) {
         </div>
       </div>
 
+      <div className="grid gap-2">
+        <Label htmlFor="business_type" className="flex items-center gap-1.5">
+          <LayoutGrid className="size-3.5 text-muted-foreground" />
+          Tipo de negocio
+        </Label>
+        <select
+          id="business_type"
+          name="business_type"
+          defaultValue="retail"
+          className="h-10 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+        >
+          <option value="retail">Retail con lector y pesables</option>
+          <option value="fashion">Indumentaria</option>
+          <option value="gastronomy">Gastronomía</option>
+        </select>
+        <div className="text-xs text-muted-foreground">
+          Esto nos va a permitir adaptar luego la carga de productos y la pantalla de ventas.
+        </div>
+      </div>
+
       <button className="h-10 rounded-xl bg-primary px-3 text-sm font-semibold text-primary-foreground transition hover:opacity-90">
         Crear negocio
       </button>
     </form>
   );
 }
-

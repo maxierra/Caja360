@@ -1,7 +1,10 @@
+import { redirect } from "next/navigation";
+
 import { createBusiness } from "@/app/app/setup/actions";
 import { SetupForm } from "@/app/app/setup/setup-form";
 import { SetupIntroGate } from "@/app/app/setup/setup-intro-gate";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { createClient } from "@/lib/supabase/server";
 
 type Props = {
   searchParams?: Promise<{ error?: string; form?: string }>;
@@ -10,6 +13,20 @@ type Props = {
 export default async function SetupPage({ searchParams }: Props) {
   const sp = (await searchParams) ?? {};
   const showForm = sp.form === "1" || Boolean(sp.error);
+
+  const supabase = await createClient();
+  const { data: authData } = await supabase.auth.getUser();
+  if (authData.user) {
+    const { data: memberships } = await supabase
+      .from("memberships")
+      .select("business_id")
+      .eq("user_id", authData.user.id)
+      .is("deleted_at", null)
+      .limit(1);
+    if (memberships && memberships.length > 0) {
+      redirect("/app/products?ob=product");
+    }
+  }
 
   return (
     <SetupIntroGate showForm={showForm}>

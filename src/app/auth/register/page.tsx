@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { BarChart3, Lock, Mail, ShieldCheck, Store } from "lucide-react";
+import { BarChart3, Lock, Mail, ShieldCheck, ShoppingCart, Store } from "lucide-react";
 
 import { signUp } from "@/app/auth/actions";
+import { isPublicSignupEnabled } from "@/lib/public-signup";
 import {
   AuthEyebrow,
   AuthFormBody,
@@ -28,6 +29,7 @@ type Props = {
 
 export default async function RegisterPage({ searchParams }: Props) {
   const sp = (await searchParams) ?? {};
+  const signupOpen = isPublicSignupEnabled();
   const showCheckEmail = sp.check_email === "1";
   const checkEmailAddress =
     typeof sp.email === "string" && sp.email.trim().length > 0 ? sp.email.trim() : null;
@@ -52,16 +54,21 @@ export default async function RegisterPage({ searchParams }: Props) {
                 eyebrow={
                   <AuthEyebrow>
                     <Store className="size-3.5 text-sky-600" />
-                    Alta de cuenta
+                    {signupOpen ? "Alta de cuenta" : "Comprá para acceder"}
                   </AuthEyebrow>
                 }
-                title="Crear cuenta"
-                description="Registrate y probá el POS en minutos."
+                title={signupOpen ? "Crear cuenta" : "Registro cerrado"}
+                description={
+                  signupOpen
+                    ? "Registrate y probá el POS en minutos."
+                    : "Las cuentas nuevas se activan al comprar el software desde la landing."
+                }
               >
                 {sp.error ? authAlertError(sp.error) : null}
               </AuthFormHeader>
 
               <AuthFormBody>
+                {signupOpen ? (
                 <form action={signUp} className="grid gap-5">
                   <div className="grid gap-2">
                     <Label htmlFor="email" className={authLabelClassName}>
@@ -99,6 +106,21 @@ export default async function RegisterPage({ searchParams }: Props) {
                   </div>
                   <AuthPrimaryButton>Crear cuenta</AuthPrimaryButton>
                 </form>
+                ) : (
+                  <div className="grid gap-4">
+                    <p className="text-sm text-slate-600">
+                      Obtené licencia de por vida del POS con pago único por Mercado Pago. Recibís usuario y
+                      contraseña por email al instante.
+                    </p>
+                    <Link
+                      href="/comprar/software_lifetime"
+                      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-sky-800 px-4 text-sm font-bold text-white"
+                    >
+                      <ShoppingCart className="size-4" />
+                      Comprar software
+                    </Link>
+                  </div>
+                )}
               </AuthFormBody>
 
               <AuthFormFooter>

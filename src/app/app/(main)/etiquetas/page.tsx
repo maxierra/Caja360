@@ -30,5 +30,24 @@ export default async function EtiquetasPage() {
   const supabase = await createClient();
   const { data: biz } = await supabase.from("businesses").select("name").eq("id", businessId).maybeSingle();
 
-  return <EtiquetasClient businessName={(biz as { name?: string } | null)?.name ?? "Mi negocio"} />;
+  const { data: products } = await supabase
+    .from("products")
+    .select("id,name,price,barcode,sku")
+    .eq("business_id", businessId)
+    .eq("active", true)
+    .order("name", { ascending: true })
+    .limit(5000);
+
+  return (
+    <EtiquetasClient
+      businessName={(biz as { name?: string } | null)?.name ?? "Mi negocio"}
+      products={(products ?? []) as Array<{
+        id: string;
+        name: string;
+        price: number;
+        barcode: string | null;
+        sku: string | null;
+      }>}
+    />
+  );
 }

@@ -3,15 +3,26 @@ import { cookies } from "next/headers";
 
 import { ProductsClient } from "@/app/app/(main)/products/products-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { normalizeBusinessType } from "@/lib/business-types";
 import { isMissingOnboardingColumnError } from "@/lib/onboarding-column";
 import { createClient } from "@/lib/supabase/server";
+
+type MembershipRow = {
+  role: string | null;
+  permissions: Record<string, unknown> | null;
+};
 
 type ProductRow = {
   id: string;
   name: string;
+  image_path: string | null;
+  image_url: string | null;
   barcode: string | null;
   scale_code: string | null;
   category: string | null;
+  variant_group: string | null;
+  size: string | null;
+  color: string | null;
   price: string | number;
   cost: string | number;
   sold_by_weight: boolean;
@@ -51,7 +62,7 @@ export default async function ProductsPage() {
 
   const { data: bizOnb, error: bizOnbError } = await supabase
     .from("businesses")
-    .select("onboarding_completed_at")
+    .select("onboarding_completed_at,business_type")
     .eq("id", businessId)
     .maybeSingle();
   const onboardingIncomplete = isMissingOnboardingColumnError(bizOnbError)
@@ -61,7 +72,7 @@ export default async function ProductsPage() {
   const { data } = await supabase
     .from("products")
     .select(
-      "id,name,barcode,scale_code,category,price,cost,sold_by_weight,stock,stock_decimal,low_stock_threshold,low_stock_threshold_decimal,expires_at,active"
+      "id,name,image_path,image_url,barcode,scale_code,category,variant_group,size,color,price,cost,sold_by_weight,stock,stock_decimal,low_stock_threshold,low_stock_threshold_decimal,expires_at,active"
     )
     .eq("business_id", businessId)
     .order("created_at", { ascending: false })
@@ -83,8 +94,9 @@ export default async function ProductsPage() {
       .eq("business_id", businessId)
       .is("deleted_at", null)
       .maybeSingle();
-    const role = (membership as any)?.role as string | null;
-    const perms = ((membership as any)?.permissions ?? {}) as Record<string, unknown>;
+    const typedMembership = membership as MembershipRow | null;
+    const role = typedMembership?.role ?? null;
+    const perms = typedMembership?.permissions ?? {};
     if (role !== "owner") {
       canEditPrice = perms.products_edit_price === true;
       canEditStock = perms.products_edit_stock === true;
@@ -100,6 +112,7 @@ export default async function ProductsPage() {
 
       <ProductsClient
         products={products}
+        businessType={normalizeBusinessType((bizOnb as { business_type?: string | null } | null)?.business_type)}
         canEditPrice={canEditPrice}
         canEditStock={canEditStock}
         guideProductStep={guideProductStep}

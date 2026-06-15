@@ -29,6 +29,15 @@ export type TicketData = {
   notes?: string;
   kind: "sale" | "manual" | "opening" | "void" | "closure";
   created_at?: string;
+  /** Datos fiscales ARCA/AFIP cuando la venta tiene comprobante electrónico. */
+  fiscal?: {
+    voucherTypeLabel: string;
+    posNumber: number;
+    voucherNumber: number;
+    cae: string;
+    caeExpiresAt: string;
+    qrPayload: string;
+  };
   closureData?: {
     openedAt: string;
     closedAt: string;
@@ -151,6 +160,14 @@ export function formatSaleTicketPlainText(data: TicketData): string {
     lines.push(`Recibido: $${cashReceived.toFixed(2)}`);
     lines.push(`Vuelto: $${change.toFixed(2)}`);
   }
+  if (data.fiscal) {
+    lines.push(PLAIN_SEP);
+    lines.push(data.fiscal.voucherTypeLabel);
+    lines.push(`PtoVta: ${data.fiscal.posNumber}  Comp: ${data.fiscal.voucherNumber}`);
+    lines.push(`CAE: ${data.fiscal.cae}`);
+    lines.push(`Vto CAE: ${data.fiscal.caeExpiresAt}`);
+    if (data.fiscal.qrPayload) lines.push(`Verificar: ${data.fiscal.qrPayload}`);
+  }
   if (business?.ticket_footer) lines.push(business.ticket_footer);
   lines.push(kind === "closure" ? "Fin de turno" : "Gracias por su compra");
   lines.push("***");
@@ -174,6 +191,7 @@ export function generateTicketHtml(data: TicketData) {
     created_at,
     closureData,
     promotion,
+    fiscal,
   } = data;
   const printedAt = created_at ? new Date(created_at).toLocaleString("es-AR") : new Date().toLocaleString("es-AR");
   
@@ -292,6 +310,24 @@ export function generateTicketHtml(data: TicketData) {
       ${paymentMethod ? `<div style="font-size:12px;display:flex;justify-content:space-between;margin-top:4px;"><span>Pago</span><span>${escapeHtml(getPaymentMethodLabel(paymentMethod, paymentMethodLabels))}</span></div>` : ""}
       ${cashReceived ? `<div style="font-size:12px;display:flex;justify-content:space-between"><span>Recibido</span><span>$${cashReceived.toFixed(2)}</span></div>` : ""}
       ${cashReceived ? `<div style="font-size:12px;display:flex;justify-content:space-between"><span>Vuelto</span><span>$${change.toFixed(2)}</span></div>` : ""}
+      ${
+        fiscal
+          ? `
+      <div style="border-top:1px dashed #000;margin:8px 0;"></div>
+      <div style="text-align:center;font-size:11px;line-height:1.4;">
+        <div style="font-weight:bold;">${escapeHtml(fiscal.voucherTypeLabel)}</div>
+        <div>PtoVta: ${fiscal.posNumber} · Comp: ${String(fiscal.voucherNumber).padStart(8, "0")}</div>
+        <div>CAE: ${escapeHtml(fiscal.cae)}</div>
+        <div>Vto CAE: ${escapeHtml(fiscal.caeExpiresAt)}</div>
+        ${
+          fiscal.qrPayload
+            ? `<div style="margin-top:6px;font-size:9px;word-break:break-all;">Verificar: ${escapeHtml(fiscal.qrPayload)}</div>`
+            : ""
+        }
+      </div>
+      `
+          : ""
+      }
     `}
     
     ${business?.ticket_footer ? `<div style="margin-top:15px;text-align:center;font-size:11px;">${escapeHtml(business.ticket_footer)}</div>` : ""}

@@ -74,6 +74,10 @@ export function useCart() {
     setItems([]);
   }, []);
 
+  const replace = React.useCallback((nextItems: CartItem[]) => {
+    setItems(nextItems);
+  }, []);
+
   const consumeLastAdded = React.useCallback(() => {
     setLastAddedProductId(null);
   }, []);
@@ -88,6 +92,7 @@ export function useCart() {
     dec,
     remove,
     clear,
+    replace,
     consumeLastAdded,
   };
 }

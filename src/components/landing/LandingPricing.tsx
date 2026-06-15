@@ -18,6 +18,7 @@ type Props = {
     semester: PlanConfig;
     annual: PlanConfig;
   };
+  lifetimePrice: number;
 };
 
 const FEATURES = [
@@ -64,9 +65,7 @@ function formatMoney(n: number) {
   return n.toLocaleString("es-AR", { maximumFractionDigits: 0 });
 }
 
-export function LandingPricing({ plans }: Props) {
-  const currency = plans.monthly.currency;
-
+export function LandingPricing({ plans, lifetimePrice }: Props) {
   const rows: Array<{
     key: PlanKey;
     serifTitle: string;
@@ -113,15 +112,39 @@ export function LandingPricing({ plans }: Props) {
       <div className="mx-auto w-full max-w-7xl">
         <header className="mb-10 text-center md:mb-14">
           <h2 className="font-serif text-3xl font-bold tracking-tight text-slate-900 md:text-5xl">
-            Planes en la nube
+            Software POS
           </h2>
           <p className="mx-auto mt-3 max-w-2xl text-pretty text-sm leading-relaxed text-slate-600 md:text-base">
-            Montos en {currency}. Referencia: <strong className="font-semibold text-slate-900">$ {formatMoney(plans.monthly.amount)}</strong>{" "}
-            mensual · <strong className="font-semibold text-slate-900">$ {formatMoney(plans.semester.amount)}</strong> por 6 meses ·{" "}
-            <strong className="font-semibold text-slate-900">$ {formatMoney(plans.annual.amount)}</strong> por 12 meses. Registrate y probá{" "}
-            <strong className="font-semibold text-sky-800">7 días gratis</strong>; el cobro aplica cuando activás un plan desde tu cuenta.
+            Pago único con licencia de por vida. También ofrecemos planes por período para clientes que ya tienen cuenta.
           </p>
         </header>
+
+        <article className="mx-auto mb-10 max-w-xl overflow-hidden rounded-2xl border-2 border-teal-600/40 bg-gradient-to-b from-white to-teal-50/80 p-8 text-center shadow-lg shadow-teal-100/60">
+          <div className="text-xs font-bold uppercase tracking-wide text-teal-800">Recomendado</div>
+          <h3 className="mt-2 font-serif text-2xl font-bold text-slate-900">Licencia de por vida</h3>
+          <p className="mt-2 text-sm text-slate-600">Un solo pago. Sin mensualidades. Acceso inmediato al pagar.</p>
+          <div className="mt-6 text-4xl font-extrabold tabular-nums text-slate-900">
+            $ {formatMoney(lifetimePrice)}
+          </div>
+          <ul className="mt-6 space-y-2 text-left text-sm text-slate-700">
+            {FEATURES.map((f) => (
+              <li key={f} className="flex gap-2">
+                <Check className="mt-0.5 size-4 shrink-0 text-teal-600" />
+                {f}
+              </li>
+            ))}
+          </ul>
+          <Link
+            href="/comprar/software_lifetime"
+            className={cn(landingCtaPrimary, "mt-6 inline-flex h-12 w-full items-center justify-center rounded-xl text-sm font-bold")}
+          >
+            Comprar con Mercado Pago
+          </Link>
+        </article>
+
+        <h3 className="mb-6 text-center text-sm font-semibold uppercase tracking-wide text-slate-500">
+          Planes por período (cuentas existentes)
+        </h3>
 
         <div className="mx-auto grid w-full max-w-6xl gap-6 lg:grid-cols-3 lg:gap-5">
           {rows.map(({ key, serifTitle, months, plan, blurb, cycleLabel, featured }) => {
@@ -207,13 +230,12 @@ export function LandingPricing({ plans }: Props) {
                 </p>
 
                 <Link
-                  href="/auth/register"
+                  href="/auth/login"
                   className={cn(
-                    landingCtaPrimary,
-                    "mt-5 inline-flex h-11 w-full items-center justify-center rounded-xl text-sm font-bold"
+                    "mt-5 inline-flex h-11 w-full items-center justify-center rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-800 hover:bg-slate-50"
                   )}
                 >
-                  <span>Empezar prueba gratis</span>
+                  <span>Renovar desde mi cuenta</span>
                 </Link>
               </article>
             );

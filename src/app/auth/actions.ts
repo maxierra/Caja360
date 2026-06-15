@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 
 import { createMonitoredAction } from "@/lib/action-wrapper";
 import { notifyAdminUserSignup } from "@/lib/admin-alerts-send";
+import { isPublicSignupEnabled } from "@/lib/public-signup";
 import { getAppBaseUrl } from "@/lib/app-base-url";
 import { firstAllowedMemberPath } from "@/lib/employee-permissions";
 import { createClient } from "@/lib/supabase/server";
@@ -180,6 +181,10 @@ async function signInImpl(formData: FormData) {
 }
 
 async function signUpImpl(formData: FormData) {
+  if (!isPublicSignupEnabled()) {
+    redirect(`/auth/register?error=${encodeURIComponent("El registro gratuito está cerrado. Comprá el software desde la página principal.")}`);
+  }
+
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
 

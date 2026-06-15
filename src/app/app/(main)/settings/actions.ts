@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 
 import { createMonitoredAction } from "@/lib/action-wrapper";
+import { normalizeBusinessType } from "@/lib/business-types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -16,11 +17,17 @@ async function updateBusinessInfoImpl(formData: FormData) {
   }
 
   const name = String(formData.get("name") ?? "").trim();
+  const business_type = normalizeBusinessType(String(formData.get("business_type") ?? ""));
   const address = String(formData.get("address") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim();
   const cuit = String(formData.get("cuit") ?? "").trim();
   const ticket_header = String(formData.get("ticket_header") ?? "").trim();
   const ticket_footer = String(formData.get("ticket_footer") ?? "").trim();
+  const gastronomy_counter_enabled = formData.get("gastronomy_counter_enabled") === "on";
+  const gastronomy_delivery_enabled = formData.get("gastronomy_delivery_enabled") === "on";
+  const gastronomy_tables_enabled = formData.get("gastronomy_tables_enabled") === "on";
+  const tables_count = Number(String(formData.get("tables_count") ?? "0").trim() || "0");
+  const tables_names = String(formData.get("tables_names") ?? "").trim();
 
   if (!name) {
     return { error: "El nombre del negocio es obligatorio" };
@@ -32,6 +39,10 @@ async function updateBusinessInfoImpl(formData: FormData) {
     .from("businesses")
     .update({
       name,
+      business_type,
+      gastronomy_counter_enabled,
+      gastronomy_delivery_enabled,
+      gastronomy_tables_enabled,
       address: address || null,
       phone: phone || null,
       cuit: cuit || null,
@@ -45,7 +56,55 @@ async function updateBusinessInfoImpl(formData: FormData) {
     return { error: error.message };
   }
 
+  if (business_type === "gastronomy") {
+    let nextTableNames = tables_names
+      .split("\n")
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    const targetCount =
+      Number.isFinite(tables_count) && tables_count >= 0
+        ? Math.min(Math.floor(tables_count), 200)
+        : nextTableNames.length;
+
+    if (gastronomy_tables_enabled) {
+      if (nextTableNames.length === 0 && targetCount > 0) {
+        nextTableNames = Array.from({ length: targetCount }, (_, index) => `Mesa ${index + 1}`);
+      } else if (targetCount > nextTableNames.length) {
+        for (let index = nextTableNames.length + 1; index <= targetCount; index += 1) {
+          nextTableNames.push(`Mesa ${index}`);
+        }
+      } else if (targetCount < nextTableNames.length) {
+        nextTableNames = nextTableNames.slice(0, targetCount);
+      }
+    }
+
+    if (!gastronomy_tables_enabled) {
+      nextTableNames = [];
+    }
+
+    const { error: deleteTablesError } = await supabase.from("business_tables").delete().eq("business_id", businessId);
+    if (deleteTablesError) {
+      return { error: deleteTablesError.message };
+    }
+
+    if (nextTableNames.length > 0) {
+      const { error: insertTablesError } = await supabase.from("business_tables").insert(
+        nextTableNames.map((tableName) => ({
+          business_id: businessId,
+          name: tableName,
+          active: true,
+        }))
+      );
+
+      if (insertTablesError) {
+        return { error: insertTablesError.message };
+      }
+    }
+  }
+
   revalidatePath("/app/settings");
+  revalidatePath("/app/pos");
   revalidatePath("/app");
   return { success: true };
 }

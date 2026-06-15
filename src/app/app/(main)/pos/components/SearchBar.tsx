@@ -13,9 +13,10 @@ type Props = {
   onChange: (value: string) => void;
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   className?: string;
+  placeholder?: string;
 };
 
-export function SearchBar({ inputRef, value, onChange, onKeyDown, className }: Props) {
+export function SearchBar({ inputRef, value, onChange, onKeyDown, className, placeholder }: Props) {
   return (
     <div className={cn("relative", className)}>
       <div className="pointer-events-none absolute inset-y-0 left-4 flex items-center gap-2 text-muted-foreground">
@@ -27,7 +28,7 @@ export function SearchBar({ inputRef, value, onChange, onKeyDown, className }: P
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={onKeyDown}
-        placeholder="Buscar por nombre o escanear código de barras…"
+        placeholder={placeholder ?? "Buscar por nombre o escanear código de barras..."}
         className={cn(
           "h-12 rounded-2xl bg-[var(--pos-surface-2)] pl-10 pr-4 text-base lg:pr-24",
           "border border-[var(--pos-border)]",

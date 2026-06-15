@@ -18,6 +18,10 @@ export interface Database {
           id: string
           name: string
           slug: string | null
+          business_type: string
+          gastronomy_counter_enabled: boolean
+          gastronomy_delivery_enabled: boolean
+          gastronomy_tables_enabled: boolean
           address: string | null
           phone: string | null
           email: string | null
@@ -30,6 +34,10 @@ export interface Database {
           id?: string
           name: string
           slug?: string | null
+          business_type?: string
+          gastronomy_counter_enabled?: boolean
+          gastronomy_delivery_enabled?: boolean
+          gastronomy_tables_enabled?: boolean
           address?: string | null
           phone?: string | null
           email?: string | null
@@ -42,6 +50,10 @@ export interface Database {
           id?: string
           name?: string
           slug?: string | null
+          business_type?: string
+          gastronomy_counter_enabled?: boolean
+          gastronomy_delivery_enabled?: boolean
+          gastronomy_tables_enabled?: boolean
           address?: string | null
           phone?: string | null
           email?: string | null
@@ -106,6 +118,32 @@ export interface Database {
           updated_at?: string
         }
       }
+      business_tables: {
+        Row: {
+          id: string
+          business_id: string
+          name: string
+          active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          business_id: string
+          name: string
+          active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          business_id?: string
+          name?: string
+          active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
       memberships: {
         Row: {
           business_id: string
@@ -141,9 +179,14 @@ export interface Database {
           business_id: string
           name: string
           sku: string | null
+          image_path: string | null
+          image_url: string | null
           barcode: string | null
           scale_code: string | null
           category: string | null
+          variant_group: string | null
+          size: string | null
+          color: string | null
           price: number
           cost: number | null
           sold_by_weight: boolean
@@ -158,9 +201,14 @@ export interface Database {
           business_id: string
           name: string
           sku?: string | null
+          image_path?: string | null
+          image_url?: string | null
           barcode?: string | null
           scale_code?: string | null
           category?: string | null
+          variant_group?: string | null
+          size?: string | null
+          color?: string | null
           price?: number
           cost?: number | null
           sold_by_weight?: boolean
@@ -175,9 +223,14 @@ export interface Database {
           business_id?: string
           name?: string
           sku?: string | null
+          image_path?: string | null
+          image_url?: string | null
           barcode?: string | null
           scale_code?: string | null
           category?: string | null
+          variant_group?: string | null
+          size?: string | null
+          color?: string | null
           price?: number
           cost?: number | null
           sold_by_weight?: boolean

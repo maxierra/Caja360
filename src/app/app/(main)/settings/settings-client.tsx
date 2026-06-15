@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Percent, Users, Store, Wallet, X, QrCode } from "lucide-react";
+import { Percent, Users, Store, Wallet, X, QrCode, FileText } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -11,10 +11,20 @@ import { MercadoPagoPosForm } from "@/app/app/(main)/settings/mercadopago-pos-fo
 import { PaymentMethodsManager } from "@/app/app/(main)/settings/payment-methods-manager";
 import { UsersManager } from "@/app/app/(main)/settings/users-manager";
 import { PromotionsManager } from "@/app/app/(main)/settings/promotions-manager";
+import { FiscalConfigForm } from "@/app/app/(main)/settings/fiscal-config-form";
 import type { BusinessPaymentMethodRow } from "@/lib/business-payment-methods";
+import type {
+  BusinessFiscalConfig,
+  FiscalCertificate,
+  FiscalPointOfSale,
+} from "@/features/billing/types";
 
 type BusinessDefaults = {
   name: string;
+  business_type: string;
+  gastronomy_counter_enabled: boolean;
+  gastronomy_delivery_enabled: boolean;
+  gastronomy_tables_enabled: boolean;
   address: string | null;
   phone: string | null;
   cuit: string | null;
@@ -23,7 +33,16 @@ type BusinessDefaults = {
   report_daily_enabled: boolean;
   report_daily_email: string | null;
   report_daily_time: string | null;
+  tables: Array<{ id: string; name: string; active: boolean }>;
 };
+
+type FiscalSettingsProps = {
+  config: BusinessFiscalConfig | null;
+  posHomolog: FiscalPointOfSale | null;
+  posProd: FiscalPointOfSale | null;
+  certHomolog: FiscalCertificate | null;
+  certProd: FiscalCertificate | null;
+} | null;
 
 type Props = {
   defaults?: BusinessDefaults;
@@ -31,6 +50,7 @@ type Props = {
   canEditPaymentMethods: boolean;
   mercadoPagoPosExternalId: string | null;
   mercadoPagoQrReady: boolean;
+  fiscalSettings: FiscalSettingsProps;
 };
 
 type ModalAccent = "emerald" | "sky" | "violet" | "amber" | "cyan";
@@ -243,16 +263,24 @@ export function SettingsClient({
   canEditPaymentMethods,
   mercadoPagoPosExternalId,
   mercadoPagoQrReady,
+  fiscalSettings,
 }: Props) {
   const [bizOpen, setBizOpen] = React.useState(false);
   const [usersOpen, setUsersOpen] = React.useState(false);
   const [paymentOpen, setPaymentOpen] = React.useState(false);
   const [mpPosOpen, setMpPosOpen] = React.useState(false);
   const [promosOpen, setPromosOpen] = React.useState(false);
+  const [fiscalOpen, setFiscalOpen] = React.useState(false);
+
+  const fiscalActive = Boolean(fiscalSettings?.config?.is_active);
+  const fiscalCertStatus =
+    fiscalSettings?.config?.environment === "prod"
+      ? fiscalSettings?.certProd?.status
+      : fiscalSettings?.certHomolog?.status;
 
   return (
     <>
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <SettingsCard
           accent="emerald"
           icon={Store}
@@ -297,6 +325,19 @@ export function SettingsClient({
           hint={mercadoPagoQrReady ? "QR activo" : "Pendiente de configurar"}
           tooltip="Cargá el token y la caja de Mercado Pago para mostrar el QR al cobrar desde el POS."
           onClick={() => setMpPosOpen(true)}
+        />
+        <SettingsCard
+          accent="emerald"
+          icon={FileText}
+          title="Facturación ARCA"
+          description="Certificados, punto de venta y CAE."
+          hint={
+            fiscalActive
+              ? `Activa · cert ${fiscalCertStatus ?? "—"}`
+              : "Monotributo · configurar"
+          }
+          tooltip="Generá CSR, subí certificados ARCA/AFIP y activá Factura C en el POS."
+          onClick={() => setFiscalOpen(true)}
         />
       </div>
 
@@ -354,6 +395,27 @@ export function SettingsClient({
           posExternalId={mercadoPagoPosExternalId}
           qrReady={mercadoPagoQrReady}
           canEdit={canEditPaymentMethods}
+        />
+      </ModalShell>
+
+      <ModalShell
+        open={fiscalOpen}
+        title="Facturación ARCA"
+        description="Monotributo — Factura C y Notas de Crédito. Certificados por ambiente (test/prod)."
+        onClose={() => setFiscalOpen(false)}
+        maxWidthClass="max-w-3xl"
+        accent="emerald"
+      >
+        <FiscalConfigForm
+          defaults={{
+            cuit: defaults?.cuit ?? null,
+            name: defaults?.name ?? "",
+          }}
+          config={fiscalSettings?.config ?? null}
+          posHomolog={fiscalSettings?.posHomolog ?? null}
+          posProd={fiscalSettings?.posProd ?? null}
+          certHomolog={fiscalSettings?.certHomolog ?? null}
+          certProd={fiscalSettings?.certProd ?? null}
         />
       </ModalShell>
     </>

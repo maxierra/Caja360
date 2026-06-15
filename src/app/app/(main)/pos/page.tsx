@@ -3,11 +3,65 @@ import { cookies } from "next/headers";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { BusinessPaymentMethodRow } from "@/lib/business-payment-methods";
+import { normalizeBusinessType } from "@/lib/business-types";
 import { isMissingOnboardingColumnError } from "@/lib/onboarding-column";
 import { createClient } from "@/lib/supabase/server";
 
 import { PosClient, type PosCustomerCredit, type PosProduct } from "@/app/app/(main)/pos/pos-client";
 import { parseOnboardingGuideStep } from "@/app/app/(main)/onboarding/onboarding-guide-constants";
+
+type PosProductRow = {
+  id: string;
+  name: string;
+  category: string | null;
+  size: string | null;
+  color: string | null;
+  image_url: string | null;
+  price: number;
+  barcode: string | null;
+  scale_code: string | null;
+  sold_by_weight: boolean;
+  stock: number;
+  stock_decimal: number;
+};
+
+type GastronomyConfig = {
+  counterEnabled: boolean;
+  deliveryEnabled: boolean;
+  tablesEnabled: boolean;
+};
+
+type ServiceOrderRow = {
+  id: string;
+  type: "delivery" | "table";
+  status: string;
+  table_id: string | null;
+  customer_name: string | null;
+  customer_phone: string | null;
+  delivery_address: string | null;
+  notes: string | null;
+  created_at?: string | null;
+  service_order_items: Array<{
+    product_id: string;
+    name: string;
+    quantity: number;
+    unit_price: number;
+  }> | null;
+};
+
+type PosBusinessRow = {
+  name: string;
+  business_type?: string | null;
+  gastronomy_counter_enabled?: boolean | null;
+  gastronomy_delivery_enabled?: boolean | null;
+  gastronomy_tables_enabled?: boolean | null;
+  address: string | null;
+  phone: string | null;
+  cuit: string | null;
+  ticket_header: string | null;
+  ticket_footer: string | null;
+  onboarding_completed_at?: string | null;
+};
 
 function toNum(v: unknown) {
   const n = typeof v === "number" ? v : Number(v ?? 0);
@@ -44,25 +98,36 @@ export default async function PosPage({
   const supabase = await createClient();
   const { data: businessData, error: businessError } = await supabase
     .from("businesses")
-    .select("name,address,phone,cuit,ticket_header,ticket_footer,onboarding_completed_at")
+    .select("name,business_type,gastronomy_counter_enabled,gastronomy_delivery_enabled,gastronomy_tables_enabled,address,phone,cuit,ticket_header,ticket_footer,onboarding_completed_at")
     .eq("id", businessId)
     .single();
 
+  const { data: tableRows } = await supabase
+    .from("business_tables")
+    .select("id,name,active")
+    .eq("business_id", businessId)
+    .eq("active", true)
+    .order("name", { ascending: true });
+
   const { data } = await supabase
     .from("products")
-    .select("id,name,price,barcode,scale_code,sold_by_weight,stock,stock_decimal")
+    .select("id,name,category,size,color,image_url,price,barcode,scale_code,sold_by_weight,stock,stock_decimal")
     .eq("business_id", businessId)
     .eq("active", true)
     .order("name", { ascending: true })
     .limit(5000);
 
-  const products = ((data ?? []) as any[]).map(
+  const products = ((data ?? []) as PosProductRow[]).map(
     (p): PosProduct => ({
       id: String(p.id),
       name: String(p.name),
+      category: p.category ? String(p.category) : null,
+      size: p.size ? String(p.size) : null,
+      color: p.color ? String(p.color) : null,
+      image_url: p.image_url ? String(p.image_url) : null,
       price: Number(p.price) || 0,
-      barcode: (p as any).barcode ? String((p as any).barcode) : null,
-      scale_code: (p as any).scale_code ? String((p as any).scale_code) : null,
+      barcode: p.barcode ? String(p.barcode) : null,
+      scale_code: p.scale_code ? String(p.scale_code) : null,
       sold_by_weight: Boolean(p.sold_by_weight),
       stock: Number(p.stock) || 0,
       stock_decimal: Number(p.stock_decimal) || 0,
@@ -71,12 +136,12 @@ export default async function PosPage({
 
   const business = businessData
     ? {
-        name: String((businessData as any).name ?? ""),
-        address: ((businessData as any).address as string | null) ?? null,
-        phone: ((businessData as any).phone as string | null) ?? null,
-        cuit: ((businessData as any).cuit as string | null) ?? null,
-        ticket_header: ((businessData as any).ticket_header as string | null) ?? null,
-        ticket_footer: ((businessData as any).ticket_footer as string | null) ?? null,
+        name: String((businessData as PosBusinessRow).name ?? ""),
+        address: (businessData as PosBusinessRow).address ?? null,
+        phone: (businessData as PosBusinessRow).phone ?? null,
+        cuit: (businessData as PosBusinessRow).cuit ?? null,
+        ticket_header: (businessData as PosBusinessRow).ticket_header ?? null,
+        ticket_footer: (businessData as PosBusinessRow).ticket_footer ?? null,
       }
     : null;
 
@@ -150,17 +215,31 @@ export default async function PosPage({
 
   const onboardingIncomplete = isMissingOnboardingColumnError(businessError)
     ? false
-    : !(businessData as { onboarding_completed_at?: string | null } | null)?.onboarding_completed_at;
+    : !(businessData as PosBusinessRow | null)?.onboarding_completed_at;
   const guidePosStep = onboardingIncomplete && parseOnboardingGuideStep(sp.ob) === "pos";
+  const gastronomyConfig: GastronomyConfig = {
+    counterEnabled: (businessData as PosBusinessRow | null)?.gastronomy_counter_enabled ?? true,
+    deliveryEnabled: (businessData as PosBusinessRow | null)?.gastronomy_delivery_enabled ?? false,
+    tablesEnabled: (businessData as PosBusinessRow | null)?.gastronomy_tables_enabled ?? false,
+  };
 
   return (
     <PosClient
       products={products}
       business={business}
+      businessType={normalizeBusinessType((businessData as PosBusinessRow | null)?.business_type)}
       cashOpen={cashOpen}
       paymentMethodConfig={paymentMethodConfig}
       posCustomers={posCustomers}
       mercadoPagoQrReady={mercadoPagoQrReady}
+      gastronomyConfig={gastronomyConfig}
+      gastronomyTables={(tableRows ?? []) as Array<{ id: string; name: string; active: boolean }>}
+      serviceOrders={((await supabase
+        .from("service_orders")
+        .select("id,type,status,table_id,customer_name,customer_phone,delivery_address,notes,created_at,service_order_items(product_id,name,quantity,unit_price)")
+        .eq("business_id", businessId)
+        .neq("status", "delivery_closed")
+        .order("updated_at", { ascending: false })).data ?? []) as ServiceOrderRow[]}
       guidePosStep={guidePosStep}
     />
   );

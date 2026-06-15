@@ -118,6 +118,72 @@ async function fetchMercadoPagoPayment(paymentId: string): Promise<MpPayment | n
   return null;
 }
 
+async function processStoreOrderApproved(payment: MpPayment, paymentId: string): Promise<NextResponse> {
+  const orderId = String(payment.external_reference ?? "").trim();
+  if (!orderId || !/^[0-9a-f-]{36}$/i.test(orderId)) {
+    return NextResponse.json({ ok: true, ignored: "no_store_order_ref" });
+  }
+
+  let admin;
+  try {
+    admin = createAdminClient();
+  } catch {
+    return NextResponse.json({ ok: false, error: "no_admin_client" }, { status: 503 });
+  }
+
+  const { data: orderRow } = await admin.from("store_orders").select("id").eq("id", orderId).maybeSingle();
+  if (!orderRow) {
+    return NextResponse.json({ ok: true, ignored: "not_store_order" });
+  }
+
+  const providerPaymentId = String(payment.id ?? paymentId);
+
+  const { provisionStoreOrderFromPayment } = await import("@/lib/store-provision");
+  const result = await provisionStoreOrderFromPayment(orderId, payment);
+
+  if (!result.ok) {
+    console.error("[mp-webhook] store provision failed:", result.error);
+    return NextResponse.json({ ok: false, error: result.error }, { status: 500 });
+  }
+
+  const { data: provisioned } = await admin
+    .from("store_orders")
+    .select("provisioned_business_id")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  const businessId = (provisioned as { provisioned_business_id?: string } | null)?.provisioned_business_id;
+  if (businessId) {
+    const { data: subRow } = await admin.from("subscriptions").select("id").eq("business_id", businessId).maybeSingle();
+    const { error: payErr } = await admin.from("payments").insert({
+      business_id: businessId,
+      subscription_id: (subRow as { id?: string } | null)?.id ?? null,
+      provider: "mercadopago",
+      provider_payment_id: providerPaymentId,
+      amount: Number(payment.transaction_amount ?? 0),
+      currency: String(payment.currency_id ?? "ARS"),
+      status: "approved",
+      raw: { ...(payment as unknown as Record<string, unknown>), store_order_id: orderId },
+    });
+    if (payErr) {
+      console.warn("[mp-webhook] store payments insert", payErr.message);
+    }
+  }
+
+  return NextResponse.json({ ok: true, store: true, alreadyProvisioned: result.alreadyProvisioned });
+}
+
+async function isStoreOrderReference(extRef: string): Promise<boolean> {
+  if (!extRef || !/^[0-9a-f-]{36}$/i.test(extRef)) return false;
+  try {
+    const admin = createAdminClient();
+    const { data } = await admin.from("store_orders").select("id").eq("id", extRef).maybeSingle();
+    return Boolean(data);
+  } catch {
+    return false;
+  }
+}
+
 async function processSubscriptionApproved(payment: MpPayment, paymentId: string): Promise<NextResponse> {
   const businessId = String(payment.external_reference ?? "").trim();
   if (!businessId || !/^[0-9a-f-]{36}$/i.test(businessId)) {
@@ -315,6 +381,10 @@ async function processPaymentNotification(paymentId: string): Promise<NextRespon
   const extRef = String(payment.external_reference ?? "").trim();
   if (isMercadoPagoPosCheckoutExternalReference(extRef)) {
     return processPosQrApproved(payment, paymentId);
+  }
+
+  if (await isStoreOrderReference(extRef)) {
+    return processStoreOrderApproved(payment, paymentId);
   }
 
   return processSubscriptionApproved(payment, paymentId);

@@ -4,7 +4,10 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 
 import { createMonitoredAction } from "@/lib/action-wrapper";
+import { getArgentinaDayRangeUtcIso } from "@/lib/argentina-time";
 import { createClient } from "@/lib/supabase/server";
+import { emitFiscalVoucherForSale } from "@/app/app/(main)/facturacion/actions";
+import { queueSaleForConsolidated } from "@/app/app/(main)/settings/fiscal-actions";
 
 type CheckoutItem = {
   product_id: string;
@@ -35,6 +38,54 @@ type CheckoutPaymentDetails = {
     total_after: number;
   };
 };
+
+type ServiceOrderStatus =
+  | "occupied"
+  | "preparing"
+  | "served"
+  | "delivery_new"
+  | "delivery_preparing"
+  | "delivery_ready"
+  | "delivery_on_the_way"
+  | "delivery_closed";
+
+export type TodayDeliveryOrderRow = {
+  id: string;
+  status: string;
+  customer_name: string | null;
+  customer_phone: string | null;
+  delivery_address: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  closed_at: string | null;
+  service_order_items: Array<{
+    product_id: string;
+    name: string;
+    quantity: number;
+    unit_price: number;
+  }> | null;
+};
+
+type ServiceOrderInput = {
+  id?: string | null;
+  type: "delivery" | "table";
+  status: ServiceOrderStatus;
+  table_id?: string | null;
+  customer_name?: string | null;
+  customer_phone?: string | null;
+  delivery_address?: string | null;
+  notes?: string | null;
+  items: CheckoutItem[];
+};
+
+function normalizePhoneDigits(phone: string): string {
+  return phone.replace(/\D/g, "");
+}
+
+function getActiveBusinessId(cookieStore: Awaited<ReturnType<typeof cookies>>) {
+  return cookieStore.get("active_business_id")?.value ?? null;
+}
 
 async function evaluatePromotionForCart(params: {
   supabase: PosSupabaseClient;
@@ -349,9 +400,47 @@ async function checkoutSaleImpl(input: {
   revalidatePath("/app/pos");
   revalidatePath("/app/empleados");
   revalidatePath("/app/onboarding");
+  revalidatePath("/app/facturacion");
+
+  const saleTotal = appliedPromotion
+    ? Math.max(0, Math.round((totalBeforeDiscount - appliedPromotion.discountAmount) * 100) / 100)
+    : items.reduce((s, i) => s + i.quantity * i.unit_price, 0);
+
+  let fiscal: Awaited<ReturnType<typeof emitFiscalVoucherForSale>> = null;
+
+  const { data: fiscalConfig } = await supabase
+    .from("business_fiscal_config")
+    .select("billing_mode,is_active")
+    .eq("business_id", businessId)
+    .maybeSingle();
+
+  if (fiscalConfig?.is_active) {
+    if (fiscalConfig.billing_mode === "consolidated") {
+      const period = new Date().toISOString().slice(0, 7);
+      try {
+        await queueSaleForConsolidated(saleId, period);
+      } catch (e) {
+        console.warn("[checkoutSale] queue consolidated:", e);
+      }
+    } else {
+      try {
+        fiscal = await emitFiscalVoucherForSale({
+          saleId,
+          items: items.map((i) => ({
+            name: i.name,
+            quantity: Number(i.quantity),
+            unitPrice: Number(i.unit_price),
+          })),
+        });
+      } catch (e) {
+        console.warn("[checkoutSale] fiscal emission failed:", e);
+      }
+    }
+  }
 
   return {
     saleId,
+    fiscal,
     promotion: appliedPromotion
       ? {
           name: appliedPromotion.name,
@@ -417,3 +506,202 @@ async function previewPromotionImpl(input: {
 }
 
 export const previewPromotion = createMonitoredAction(previewPromotionImpl, "pos/previewPromotion");
+
+async function saveServiceOrderImpl(input: ServiceOrderInput) {
+  const cookieStore = await cookies();
+  const businessId = getActiveBusinessId(cookieStore);
+  if (!businessId) throw new Error("missing_active_business_id");
+  if (!input.items.length) throw new Error("empty_items");
+  if (input.type === "table" && !input.table_id) throw new Error("missing_table_id");
+
+  const supabase = await createClient();
+  const payload = {
+    business_id: businessId,
+    type: input.type,
+    status: input.status,
+    table_id: input.type === "table" ? input.table_id ?? null : null,
+    customer_name: input.customer_name?.trim() || null,
+    customer_phone: input.customer_phone?.trim() || null,
+    delivery_address: input.delivery_address?.trim() || null,
+    notes: input.notes?.trim() || null,
+    updated_at: new Date().toISOString(),
+  };
+
+  let orderId = input.id ?? null;
+  if (orderId) {
+    const { error } = await supabase.from("service_orders").update(payload).eq("id", orderId).eq("business_id", businessId);
+    if (error) throw new Error(error.message);
+    const { error: delErr } = await supabase.from("service_order_items").delete().eq("service_order_id", orderId).eq("business_id", businessId);
+    if (delErr) throw new Error(delErr.message);
+  } else {
+    const { data, error } = await supabase.from("service_orders").insert(payload).select("id").single();
+    if (error || !data) throw new Error(error?.message ?? "order_create_failed");
+    orderId = String(data.id);
+  }
+
+  const items = input.items.map((item) => ({
+    service_order_id: orderId,
+    business_id: businessId,
+    product_id: item.product_id,
+    name: item.name,
+    quantity: item.quantity,
+    unit_price: item.unit_price,
+  }));
+
+  const { error: itemsErr } = await supabase.from("service_order_items").insert(items);
+  if (itemsErr) throw new Error(itemsErr.message);
+
+  revalidatePath("/app/pos");
+  return { id: orderId };
+}
+
+async function closeServiceOrderImpl(input: { id: string }) {
+  const cookieStore = await cookies();
+  const businessId = getActiveBusinessId(cookieStore);
+  if (!businessId) throw new Error("missing_active_business_id");
+  const supabase = await createClient();
+
+  const { data: order, error: fetchErr } = await supabase
+    .from("service_orders")
+    .select("type")
+    .eq("id", input.id)
+    .eq("business_id", businessId)
+    .maybeSingle();
+
+  if (fetchErr) throw new Error(fetchErr.message);
+  if (!order) throw new Error("order_not_found");
+
+  if (order.type === "delivery") {
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from("service_orders")
+      .update({ status: "delivery_closed", closed_at: now, updated_at: now })
+      .eq("id", input.id)
+      .eq("business_id", businessId);
+    if (error) throw new Error(error.message);
+  } else {
+    const { error: itemsErr } = await supabase
+      .from("service_order_items")
+      .delete()
+      .eq("service_order_id", input.id)
+      .eq("business_id", businessId);
+    if (itemsErr) throw new Error(itemsErr.message);
+    const { error } = await supabase.from("service_orders").delete().eq("id", input.id).eq("business_id", businessId);
+    if (error) throw new Error(error.message);
+  }
+
+  revalidatePath("/app/pos");
+  return { success: true };
+}
+
+async function getTodayDeliveryOrdersImpl() {
+  const cookieStore = await cookies();
+  const businessId = getActiveBusinessId(cookieStore);
+  if (!businessId) throw new Error("missing_active_business_id");
+
+  const { startIso, endExclusiveIso } = getArgentinaDayRangeUtcIso();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("service_orders")
+    .select(
+      "id,status,customer_name,customer_phone,delivery_address,notes,created_at,updated_at,closed_at,service_order_items(product_id,name,quantity,unit_price)"
+    )
+    .eq("business_id", businessId)
+    .eq("type", "delivery")
+    .gte("created_at", startIso)
+    .lt("created_at", endExclusiveIso)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  return { orders: (data ?? []) as TodayDeliveryOrderRow[] };
+}
+
+export const saveServiceOrder = createMonitoredAction(saveServiceOrderImpl, "pos/saveServiceOrder");
+export const closeServiceOrder = createMonitoredAction(closeServiceOrderImpl, "pos/closeServiceOrder");
+export const getTodayDeliveryOrders = createMonitoredAction(getTodayDeliveryOrdersImpl, "pos/getTodayDeliveryOrders");
+
+async function updateTableOrderStatusImpl(input: { id: string; status: "occupied" | "preparing" | "served" }) {
+  const cookieStore = await cookies();
+  const businessId = getActiveBusinessId(cookieStore);
+  if (!businessId) throw new Error("missing_active_business_id");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("service_orders")
+    .update({ status: input.status, updated_at: new Date().toISOString() })
+    .eq("id", input.id)
+    .eq("business_id", businessId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/app/pos");
+  return { success: true };
+}
+
+export const updateTableOrderStatus = createMonitoredAction(updateTableOrderStatusImpl, "pos/updateTableOrderStatus");
+
+async function updateDeliveryOrderStatusImpl(input: {
+  id: string;
+  status: "delivery_new" | "delivery_preparing" | "delivery_ready" | "delivery_on_the_way";
+}) {
+  const cookieStore = await cookies();
+  const businessId = getActiveBusinessId(cookieStore);
+  if (!businessId) throw new Error("missing_active_business_id");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("service_orders")
+    .update({ status: input.status, updated_at: new Date().toISOString() })
+    .eq("id", input.id)
+    .eq("business_id", businessId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/app/pos");
+  return { success: true };
+}
+
+export const updateDeliveryOrderStatus = createMonitoredAction(updateDeliveryOrderStatusImpl, "pos/updateDeliveryOrderStatus");
+
+export type DeliveryCustomerLookup = {
+  customer_name: string | null;
+  delivery_address: string | null;
+  notes: string | null;
+};
+
+async function lookupDeliveryCustomerByPhoneImpl(input: { phone: string }) {
+  const cookieStore = await cookies();
+  const businessId = getActiveBusinessId(cookieStore);
+  if (!businessId) throw new Error("missing_active_business_id");
+
+  const digits = normalizePhoneDigits(input.phone);
+  if (digits.length < 8) return { customer: null as DeliveryCustomerLookup | null };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("service_orders")
+    .select("customer_name,customer_phone,delivery_address,notes,updated_at")
+    .eq("business_id", businessId)
+    .eq("type", "delivery")
+    .not("customer_phone", "is", null)
+    .order("updated_at", { ascending: false })
+    .limit(100);
+
+  if (error) throw new Error(error.message);
+
+  for (const row of data ?? []) {
+    const rowDigits = normalizePhoneDigits(String(row.customer_phone ?? ""));
+    if (rowDigits && rowDigits === digits) {
+      return {
+        customer: {
+          customer_name: (row.customer_name as string | null) ?? null,
+          delivery_address: (row.delivery_address as string | null) ?? null,
+          notes: (row.notes as string | null) ?? null,
+        } satisfies DeliveryCustomerLookup,
+      };
+    }
+  }
+
+  return { customer: null as DeliveryCustomerLookup | null };
+}
+
+export const lookupDeliveryCustomerByPhone = createMonitoredAction(
+  lookupDeliveryCustomerByPhoneImpl,
+  "pos/lookupDeliveryCustomerByPhone"
+);

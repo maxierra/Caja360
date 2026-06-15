@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { createMonitoredAction } from "@/lib/action-wrapper";
+import { normalizeBusinessType } from "@/lib/business-types";
 import { createClient } from "@/lib/supabase/server";
 import { sendWelcomePromoAfterFirstBusiness } from "@/lib/welcome-promo-email";
 
@@ -25,6 +26,7 @@ function uniqueSlug(base: string) {
 async function createBusinessImpl(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const requestedSlug = slugify(String(formData.get("slug") ?? "") || name);
+  const businessType = normalizeBusinessType(String(formData.get("business_type") ?? ""));
 
   const demoEnabled = process.env.DEMO_AUTH_ENABLED === "1";
   const hasSupabaseEnv =
@@ -78,6 +80,19 @@ async function createBusinessImpl(formData: FormData) {
   }
 
   const businessId = data as string;
+
+  const { error: businessUpdateError } = await supabase
+    .from("businesses")
+    .update({
+      business_type: businessType,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", businessId);
+
+  if (businessUpdateError) {
+    redirect(`/app/setup?error=${encodeURIComponent(businessUpdateError.message)}`);
+  }
+
   const cookieStore = await cookies();
   cookieStore.set("active_business_id", businessId, {
     httpOnly: true,

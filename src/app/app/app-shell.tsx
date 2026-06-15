@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CreditCard,
+  FileText,
   LayoutDashboard,
   Menu,
   Package,
@@ -54,6 +55,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/app/empleados", label: "Empleados", icon: UserCircle2, colorClass: "text-rose-500" },
   { href: "/app/etiquetas", label: "Etiquetas", icon: Tag, colorClass: "text-fuchsia-500" },
   { href: "/app/sales", label: "Ventas", icon: Receipt, colorClass: "text-indigo-500" },
+  { href: "/app/facturacion", label: "Facturación", icon: FileText, colorClass: "text-teal-500" },
   { href: "/app/cash", label: "Caja", icon: Wallet, colorClass: "text-emerald-500" },
   { href: "/app/reports", label: "Reportes", icon: BarChart3, colorClass: "text-sky-500" },
   { href: "/app/subscription", label: "Suscripción", icon: CreditCard, colorClass: "text-purple-500" },
@@ -221,7 +223,7 @@ export function AppShell({ children, business, user, cash, access, plan }: Props
 
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-[min(20rem,calc(100vw-2rem))] max-w-[100vw] flex-col border-r border-[var(--pos-border)] bg-[#f5f7fb] shadow-xl transition-transform duration-200 ease-out dark:bg-zinc-950",
+          "fixed inset-y-0 left-0 z-50 flex w-[min(20rem,calc(100vw-2rem))] max-w-[100vw] flex-col border-r border-[var(--pos-border)] bg-[#f5f7fb] shadow-xl transition-transform duration-200 ease-out dark:bg-[var(--sidebar)]",
           mobileNavOpen ? "translate-x-0" : "-translate-x-full pointer-events-none"
         )}
         role="dialog"
@@ -298,7 +300,7 @@ export function AppShell({ children, business, user, cash, access, plan }: Props
       <div className="flex min-h-dvh w-full gap-4 px-2 py-4 md:px-3">
         <aside
           className={cn(
-            "sticky top-4 hidden h-[calc(100dvh-2rem)] shrink-0 flex-col rounded-2xl border border-[var(--pos-border)] bg-[#f5f7fb] shadow-sm md:flex dark:bg-zinc-950",
+            "sticky top-4 hidden h-[calc(100dvh-2rem)] shrink-0 flex-col rounded-2xl border border-[var(--pos-border)] bg-[#f5f7fb] shadow-sm md:flex dark:bg-[var(--sidebar)]",
             collapsed ? "w-20" : "w-72"
           )}
         >

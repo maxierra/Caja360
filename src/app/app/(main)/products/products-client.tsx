@@ -18,14 +18,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useIsMobilePos } from "@/hooks/use-is-mobile-pos";
+import type { BusinessType } from "@/lib/business-types";
 import { cn } from "@/lib/utils";
 
 type ProductRow = {
   id: string;
   name: string;
+  image_path: string | null;
+  image_url: string | null;
   barcode: string | null;
   scale_code: string | null;
   category: string | null;
+  variant_group: string | null;
+  size: string | null;
+  color: string | null;
   price: string | number;
   cost: string | number;
   sold_by_weight: boolean;
@@ -39,6 +45,7 @@ type ProductRow = {
 
 type Props = {
   products: ProductRow[];
+  businessType?: BusinessType;
   canEditPrice?: boolean;
   canEditStock?: boolean;
   /** Recorrido inicial: resaltar «Nuevo producto» y llevar a Caja al guardar. */
@@ -175,6 +182,11 @@ function formatStock(p: ProductRow) {
     : `Stock: ${p.stock} | Mín: ${p.low_stock_threshold}`;
 }
 
+function formatVariant(p: ProductRow) {
+  const parts = [p.category, p.size ? `Talle ${p.size}` : null, p.color ? `Color ${p.color}` : null].filter(Boolean);
+  return parts.join(" · ");
+}
+
 function normCode(s: string) {
   return String(s ?? "").replace(/\s+/g, "").trim().toLowerCase();
 }
@@ -197,6 +209,7 @@ function findProductByScannedCode(products: ProductRow[], raw: string): ProductR
 
 export function ProductsClient({
   products,
+  businessType = "retail",
   canEditPrice = true,
   canEditStock = true,
   guideProductStep = false,
@@ -580,11 +593,23 @@ export function ProductsClient({
                 filtered.map((p) => (
                   <tr key={p.id} className="border-b last:border-b-0">
                     <td className="px-4 py-3">
-                      <div className="font-medium">{p.name}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {[p.barcode ? `EAN: ${p.barcode}` : null, p.expires_at ? `Vence: ${p.expires_at}` : null]
-                          .filter(Boolean)
-                          .join(" · ")}
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-[var(--pos-surface-2)]">
+                          {p.image_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={p.image_url} alt={p.name} className="h-full w-full object-cover" />
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">Sin foto</span>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="truncate font-medium">{p.name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {[formatVariant(p) || null, p.barcode ? `EAN: ${p.barcode}` : null, p.expires_at ? `Vence: ${p.expires_at}` : null]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </div>
+                        </div>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">{formatStock(p)}</td>
@@ -677,6 +702,7 @@ export function ProductsClient({
                     />
                   ) : (
                     <ProductForm
+                      businessType={businessType}
                       title=""
                       description={undefined}
                       container={false}
@@ -737,6 +763,7 @@ export function ProductsClient({
               <div className="min-h-0 flex-1 overflow-y-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
                 <div className={cn(pending ? "pointer-events-none opacity-80" : "")}>
                   <ProductForm
+                    businessType={businessType}
                     key={editProduct.id}
                     title={editProduct.name}
                     description="El precio de venta se recalcula en base a costo y margen."
@@ -744,9 +771,14 @@ export function ProductsClient({
                     defaults={{
                       id: editProduct.id,
                       name: editProduct.name,
+                      image_path: editProduct.image_path,
+                      image_url: editProduct.image_url,
                       barcode: editProduct.barcode,
                       scale_code: editProduct.scale_code,
                       category: editProduct.category,
+                      variant_group: editProduct.variant_group,
+                      size: editProduct.size,
+                      color: editProduct.color,
                       cost: Number(editProduct.cost),
                       price: Number(editProduct.price),
                       expires_at: editProduct.expires_at,

@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 type Props = {
   items: CartItem[];
   total: number;
+  contextLabel?: string | null;
   pending: boolean;
   onInc: (item: CartItem) => void;
   onDec: (item: CartItem) => void;
@@ -35,6 +36,7 @@ function round0(n: number) {
 export function CartPanel({
   items,
   total,
+  contextLabel,
   pending,
   onInc,
   onDec,
@@ -51,18 +53,21 @@ export function CartPanel({
   React.useEffect(() => {
     setGramsDraftById((prev) => {
       const next = { ...prev };
+      let changed = false;
       for (const it of items) {
         if (!it.sold_by_weight) continue;
         if (next[it.product_id] === undefined) {
           next[it.product_id] = String(round0(it.quantity * 1000));
+          changed = true;
         }
       }
       for (const id of Object.keys(next)) {
         if (!items.some((x) => x.product_id === id && x.sold_by_weight)) {
           delete next[id];
+          changed = true;
         }
       }
-      return next;
+      return changed ? next : prev;
     });
   }, [items]);
 
@@ -92,6 +97,7 @@ export function CartPanel({
           <div className="text-[11px] font-medium uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
             Total a cobrar
           </div>
+          {contextLabel ? <div className="mt-1 text-xs font-medium text-muted-foreground">{contextLabel}</div> : null}
           <div className="font-numeric text-4xl font-bold tracking-tight text-emerald-700 dark:text-emerald-300">
             <AnimatePresence mode="popLayout" initial={false}>
               <motion.span
@@ -136,10 +142,10 @@ export function CartPanel({
                 <div
                   key={item.product_id}
                   className={cn(
-                    "rounded-xl border bg-white px-2.5 py-2 transition-shadow dark:bg-zinc-900",
+                    "rounded-xl border border-[var(--pos-border)] bg-[var(--pos-surface-2)] px-2.5 py-2 transition-shadow",
                     highlight
                       ? "border-emerald-300 shadow-md shadow-emerald-100 dark:border-emerald-700 dark:shadow-emerald-900/30"
-                      : "border-zinc-200 dark:border-zinc-800"
+                      : ""
                   )}
                 >
                   {/* Fila 1: nombre + precio línea + basura */}
@@ -218,8 +224,8 @@ export function CartPanel({
                         step={item.sold_by_weight ? 10 : 1}
                         inputMode={item.sold_by_weight ? "decimal" : "numeric"}
                         className={cn(
-                          "h-8 rounded-md bg-zinc-50 text-center text-xs font-medium",
-                          "border border-zinc-200 dark:border-zinc-700 dark:bg-zinc-800",
+                          "h-8 rounded-md bg-[var(--pos-surface)] text-center text-xs font-medium",
+                          "border border-[var(--pos-border)]",
                           item.sold_by_weight ? "w-20 pr-6" : "w-14"
                         )}
                       />

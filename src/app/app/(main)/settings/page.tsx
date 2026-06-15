@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 
 import { createClient } from "@/lib/supabase/server";
 import { SettingsClient } from "@/app/app/(main)/settings/settings-client";
+import { getFiscalSettings } from "@/app/app/(main)/settings/fiscal-actions";
 import type { BusinessPaymentMethodRow } from "@/lib/business-payment-methods";
 
 export default async function SettingsPage() {
@@ -13,8 +14,14 @@ export default async function SettingsPage() {
   let mercadoPagoPosExternalId: string | null = null;
   let mercadoPagoQrReady = false;
 
+  let fiscalSettings: Awaited<ReturnType<typeof getFiscalSettings>> | null = null;
+
   let business: {
     name: string;
+    business_type: string;
+    gastronomy_counter_enabled: boolean;
+    gastronomy_delivery_enabled: boolean;
+    gastronomy_tables_enabled: boolean;
     address: string | null;
     phone: string | null;
     cuit: string | null;
@@ -23,6 +30,7 @@ export default async function SettingsPage() {
     report_daily_enabled: boolean;
     report_daily_email: string | null;
     report_daily_time: string | null;
+    tables: Array<{ id: string; name: string; active: boolean }>;
   } | null = null;
 
   if (businessId) {
@@ -30,13 +38,37 @@ export default async function SettingsPage() {
     const { data } = await supabase
       .from("businesses")
       .select(
-        "name,address,phone,cuit,ticket_header,ticket_footer,report_daily_enabled,report_daily_email,report_daily_time,mercadopago_pos_external_id"
+        "name,business_type,gastronomy_counter_enabled,gastronomy_delivery_enabled,gastronomy_tables_enabled,address,phone,cuit,ticket_header,ticket_footer,report_daily_enabled,report_daily_email,report_daily_time,mercadopago_pos_external_id"
       )
       .eq("id", businessId)
       .single();
 
     if (data) {
-      business = data as unknown as typeof business;
+      const typedBusiness = data as {
+        name: string;
+        business_type: string;
+        gastronomy_counter_enabled: boolean;
+        gastronomy_delivery_enabled: boolean;
+        gastronomy_tables_enabled: boolean;
+        address: string | null;
+        phone: string | null;
+        cuit: string | null;
+        ticket_header: string | null;
+        ticket_footer: string | null;
+        report_daily_enabled: boolean;
+        report_daily_email: string | null;
+        report_daily_time: string | null;
+      };
+      const { data: tableRows } = await supabase
+        .from("business_tables")
+        .select("id,name,active")
+        .eq("business_id", businessId)
+        .order("name", { ascending: true });
+
+      business = {
+        ...typedBusiness,
+        tables: (tableRows ?? []) as Array<{ id: string; name: string; active: boolean }>,
+      };
       mercadoPagoPosExternalId =
         ((data as { mercadopago_pos_external_id?: string | null }).mercadopago_pos_external_id as string | null) ??
         null;
@@ -70,6 +102,12 @@ export default async function SettingsPage() {
       .order("sort_order", { ascending: true });
 
     paymentMethods = (pm ?? []) as BusinessPaymentMethodRow[];
+
+    try {
+      fiscalSettings = await getFiscalSettings();
+    } catch {
+      fiscalSettings = null;
+    }
   }
 
   return (
@@ -88,6 +126,7 @@ export default async function SettingsPage() {
           canEditPaymentMethods={canEditPaymentMethods}
           mercadoPagoPosExternalId={mercadoPagoPosExternalId}
           mercadoPagoQrReady={mercadoPagoQrReady}
+          fiscalSettings={fiscalSettings}
         />
       </div>
     </div>

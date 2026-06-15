@@ -121,6 +121,7 @@ export function memberCanAccessAppPath(
   if (pathname.startsWith("/app/pos")) return canAccessPos(p);
   if (pathname.startsWith("/app/inventory")) return can(p, "inventory");
   if (pathname.startsWith("/app/sales")) return can(p, "sales");
+  if (pathname.startsWith("/app/facturacion")) return can(p, "sales");
   if (pathname.startsWith("/app/cash")) return can(p, "cash");
   if (pathname.startsWith("/app/products")) return can(p, "products");
   if (pathname.startsWith("/app/clientes")) return can(p, "clientes");

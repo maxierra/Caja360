@@ -4,7 +4,13 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 
 import { createMonitoredAction } from "@/lib/action-wrapper";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+
+type MembershipRow = {
+  role: string | null;
+  permissions: Record<string, unknown> | null;
+};
 
 function getActiveBusinessId(cookieStore: Awaited<ReturnType<typeof cookies>>) {
   return cookieStore.get("active_business_id")?.value ?? null;
@@ -23,6 +29,80 @@ function toNullableDate(input: FormDataEntryValue | null) {
   return raw;
 }
 
+function toNullableText(input: FormDataEntryValue | null) {
+  const raw = String(input ?? "").trim();
+  return raw || null;
+}
+
+function splitVariantValues(input: FormDataEntryValue | null) {
+  const raw = String(input ?? "").trim();
+  if (!raw) return [];
+  return Array.from(
+    new Set(
+      raw
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+function normalizeFileName(fileName: string) {
+  return fileName
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9.-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .toLowerCase();
+}
+
+function getImageExtension(file: File) {
+  const fromType = file.type.split("/")[1]?.trim().toLowerCase();
+  if (fromType) {
+    if (fromType === "jpeg") return "jpg";
+    return fromType;
+  }
+  const fromName = file.name.split(".").pop()?.trim().toLowerCase();
+  return fromName || "bin";
+}
+
+function buildProductImagePath(businessId: string, productId: string, file: File) {
+  const ext = getImageExtension(file);
+  const baseName = normalizeFileName(file.name.replace(/\.[^.]+$/, "")) || "foto";
+  return `${businessId}/${productId}/${baseName}.${ext}`;
+}
+
+async function uploadProductImage(params: {
+  businessId: string;
+  productId: string;
+  file: File;
+}) {
+  const admin = createAdminClient();
+  const path = buildProductImagePath(params.businessId, params.productId, params.file);
+  const bytes = Buffer.from(await params.file.arrayBuffer());
+  const { error: uploadError } = await admin.storage.from("product-images").upload(path, bytes, {
+    contentType: params.file.type || undefined,
+    upsert: true,
+  });
+
+  if (uploadError) {
+    throw new Error(uploadError.message);
+  }
+
+  const { data } = admin.storage.from("product-images").getPublicUrl(path);
+  return { imagePath: path, imageUrl: data.publicUrl };
+}
+
+async function deleteProductImage(path: string | null | undefined) {
+  if (!path) return;
+  const admin = createAdminClient();
+  const { error } = await admin.storage.from("product-images").remove([path]);
+  if (error) {
+    console.warn("[products] delete image:", error.message);
+  }
+}
+
 async function createProductImpl(formData: FormData) {
   const cookieStore = await cookies();
   const businessId = getActiveBusinessId(cookieStore);
@@ -36,23 +116,115 @@ async function createProductImpl(formData: FormData) {
   }
 
   const soldByWeight = String(formData.get("sold_by_weight") ?? "off") === "on";
+  const businessType = String(formData.get("business_type") ?? "retail").trim();
+  const baseCategory = toNullableText(formData.get("category"));
+  const baseCost = toNumber(formData.get("cost"));
+  const basePrice = toNumber(formData.get("price"));
+  const baseActive = String(formData.get("active") ?? "") !== "off";
+  const baseStock = soldByWeight ? 0 : Math.trunc(toNumber(formData.get("stock")));
+  const baseStockDecimal = soldByWeight ? toNumber(formData.get("stock_decimal")) : 0;
+  const baseLowStockThreshold = soldByWeight ? 0 : Math.trunc(toNumber(formData.get("low_stock_threshold")));
+  const baseLowStockThresholdDecimal = soldByWeight ? toNumber(formData.get("low_stock_threshold_decimal")) : 0;
+  const imageFile = formData.get("image_file");
+  const image = imageFile instanceof File && imageFile.size > 0 ? imageFile : null;
+
+  if (businessType === "fashion") {
+    const sizes = splitVariantValues(formData.get("sizes_input"));
+    const colors = splitVariantValues(formData.get("colors_input"));
+    const variantGroup = toNullableText(formData.get("variant_group")) ?? crypto.randomUUID();
+    const sizeValues = sizes.length ? sizes : [null];
+    const colorValues = colors.length ? colors : [null];
+    const rowIds = sizeValues.flatMap(() => colorValues.map(() => crypto.randomUUID()));
+    let index = 0;
+    const rows: Array<{
+      id: string;
+      business_id: string;
+      name: string;
+      barcode: string | null;
+      scale_code: string | null;
+      category: string | null;
+      variant_group: string;
+      size: string | null;
+      color: string | null;
+      image_path: string | null;
+      image_url: string | null;
+      cost: number;
+      price: number;
+      expires_at: null;
+      sold_by_weight: boolean;
+      stock: number;
+      stock_decimal: number;
+      low_stock_threshold: number;
+      low_stock_threshold_decimal: number;
+      active: boolean;
+    }> = sizeValues.flatMap((size) =>
+      colorValues.map((color) => ({
+        id: rowIds[index++],
+        business_id: businessId,
+        name,
+        barcode: null,
+        scale_code: null,
+        category: baseCategory,
+        variant_group: variantGroup,
+        size,
+        color,
+        image_path: null,
+        image_url: null,
+        cost: baseCost,
+        price: basePrice,
+        expires_at: null,
+        sold_by_weight: false,
+        stock: baseStock,
+        stock_decimal: 0,
+        low_stock_threshold: baseLowStockThreshold,
+        low_stock_threshold_decimal: 0,
+        active: baseActive,
+      }))
+    );
+
+    const supabase = await createClient();
+    if (image) {
+      const uploads = await Promise.all(rowIds.map((productId) => uploadProductImage({ businessId, productId, file: image })));
+      rows.forEach((row, rowIndex) => {
+        row.image_path = uploads[rowIndex]?.imagePath ?? null;
+        row.image_url = uploads[rowIndex]?.imageUrl ?? null;
+      });
+    }
+    const { error } = await supabase.from("products").insert(rows);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    revalidatePath("/app/products");
+    revalidatePath("/app/onboarding");
+    return;
+  }
 
   const supabase = await createClient();
+  const productId = crypto.randomUUID();
+  const imageUpload = image ? await uploadProductImage({ businessId, productId, file: image }) : null;
   const { error } = await supabase.from("products").insert({
+    id: productId,
     business_id: businessId,
     name,
-    barcode: String(formData.get("barcode") ?? "").trim() || null,
-    scale_code: String(formData.get("scale_code") ?? "").trim() || null,
-    category: String(formData.get("category") ?? "").trim() || null,
-    cost: toNumber(formData.get("cost")),
-    price: toNumber(formData.get("price")),
+    image_path: imageUpload?.imagePath ?? null,
+    image_url: imageUpload?.imageUrl ?? null,
+    barcode: toNullableText(formData.get("barcode")),
+    scale_code: toNullableText(formData.get("scale_code")),
+    category: baseCategory,
+    variant_group: toNullableText(formData.get("variant_group")),
+    size: toNullableText(formData.get("size")),
+    color: toNullableText(formData.get("color")),
+    cost: baseCost,
+    price: basePrice,
     expires_at: toNullableDate(formData.get("expires_at")),
     sold_by_weight: soldByWeight,
-    stock: soldByWeight ? 0 : Math.trunc(toNumber(formData.get("stock"))),
-    stock_decimal: soldByWeight ? toNumber(formData.get("stock_decimal")) : 0,
-    low_stock_threshold: soldByWeight ? 0 : Math.trunc(toNumber(formData.get("low_stock_threshold"))),
-    low_stock_threshold_decimal: soldByWeight ? toNumber(formData.get("low_stock_threshold_decimal")) : 0,
-    active: String(formData.get("active") ?? "") !== "off",
+    stock: baseStock,
+    stock_decimal: baseStockDecimal,
+    low_stock_threshold: baseLowStockThreshold,
+    low_stock_threshold_decimal: baseLowStockThresholdDecimal,
+    active: baseActive,
   });
 
   if (error) {
@@ -76,6 +248,14 @@ async function deleteProductImpl(formData: FormData) {
   }
 
   const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("products")
+    .select("image_path")
+    .eq("id", id)
+    .eq("business_id", businessId)
+    .maybeSingle();
+
+  await deleteProductImage((existing as { image_path?: string | null } | null)?.image_path);
   const { error } = await supabase.from("products").delete().eq("id", id).eq("business_id", businessId);
 
   if (error) {
@@ -103,6 +283,8 @@ async function updateProductImpl(formData: FormData) {
   }
 
   const soldByWeight = String(formData.get("sold_by_weight") ?? "off") === "on";
+  const imageFile = formData.get("image_file");
+  const image = imageFile instanceof File && imageFile.size > 0 ? imageFile : null;
 
   const supabase = await createClient();
   const { data: authData } = await supabase.auth.getUser();
@@ -165,14 +347,25 @@ async function updateProductImpl(formData: FormData) {
   const scale_code = formData.has("scale_code")
     ? String(formData.get("scale_code") ?? "").trim() || null
     : ex.scale_code;
+  const currentImagePath = (beforeRow as { image_path?: string | null }).image_path ?? null;
+  const currentImageUrl = (beforeRow as { image_url?: string | null }).image_url ?? null;
+  const nextImage = image ? await uploadProductImage({ businessId, productId: id, file: image }) : null;
+  if (image && currentImagePath && currentImagePath !== nextImage?.imagePath) {
+    await deleteProductImage(currentImagePath);
+  }
 
   const { data: afterRow, error } = await supabase
     .from("products")
     .update({
       name,
-      barcode: String(formData.get("barcode") ?? "").trim() || null,
+      image_path: nextImage?.imagePath ?? currentImagePath,
+      image_url: nextImage?.imageUrl ?? currentImageUrl,
+      barcode: toNullableText(formData.get("barcode")),
       scale_code,
-      category: String(formData.get("category") ?? "").trim() || null,
+      category: toNullableText(formData.get("category")),
+      variant_group: toNullableText(formData.get("variant_group")),
+      size: toNullableText(formData.get("size")),
+      color: toNullableText(formData.get("color")),
       cost: toNumber(formData.get("cost")),
       price: toNumber(formData.get("price")),
       expires_at: toNullableDate(formData.get("expires_at")),
@@ -203,8 +396,9 @@ async function updateProductImpl(formData: FormData) {
       .is("deleted_at", null)
       .maybeSingle();
 
-    const role = (membership as any)?.role as string | null;
-    const perms = ((membership as any)?.permissions ?? {}) as Record<string, unknown>;
+    const typedMembership = membership as MembershipRow | null;
+    const role = typedMembership?.role ?? null;
+    const perms = typedMembership?.permissions ?? {};
 
     if (role !== "owner") {
       const priceChanged = nextCost !== Number(ex.cost) || nextPrice !== Number(ex.price);
