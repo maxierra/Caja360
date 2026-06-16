@@ -1,7 +1,7 @@
 import Afip from "@afipsdk/afip.js";
 import { supabaseAdmin } from "./supabase.js";
 import { loadCertAndKey } from "./cert-service.js";
-import type { FiscalEnvironment } from "./config.js";
+import { config, type FiscalEnvironment } from "./config.js";
 
 export type VoucherItem = {
   name: string;
@@ -28,6 +28,7 @@ async function getAfipClient(businessId: string, environment: FiscalEnvironment)
       cert,
       key,
       production: environment === "prod",
+      access_token: config.afipSdkAccessToken,
     }),
     cuit,
   };

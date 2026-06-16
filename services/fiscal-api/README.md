@@ -9,6 +9,27 @@ PORT=3099
 FISCAL_API_KEY=your-secret-key
 SUPABASE_URL=https://xxx.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=xxx
+AFIP_SDK_ACCESS_TOKEN=
+```
+
+`AFIP_SDK_ACCESS_TOKEN` es opcional según tu cuenta en AfipSDK; debe coincidir con `FISCAL_API_KEY` en la app Next.js.
+
+## Deploy en Seenode (servicio aparte)
+
+`fiscal-api` **no va dentro del build de Next.js**. Creá un **segundo Web Service** en Seenode:
+
+| Campo | Valor |
+|--------|--------|
+| Root directory | `services/fiscal-api` |
+| Build command | `npm ci && npm run build` |
+| Start command | `npm start` |
+| Port | `3099` (o el que uses en `PORT`) |
+
+En el Web Service de **Next.js**, configurá:
+
+```env
+FISCAL_API_URL=https://tu-fiscal-api.seenode.com
+FISCAL_API_KEY=misma-clave-que-en-fiscal-api
 ```
 
 ## Desarrollo

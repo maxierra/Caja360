@@ -1,0 +1,1 @@
+-- Ver 20260617170000_preload_products_import_fix.sql (reemplazado por esquema import-friendly).

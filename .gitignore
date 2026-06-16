@@ -3,6 +3,8 @@
 # dependencies
 /node_modules
 printer-agent/node_modules
+services/fiscal-api/node_modules
+services/fiscal-api/dist
 /.pnp
 .pnp.*
 .yarn/*

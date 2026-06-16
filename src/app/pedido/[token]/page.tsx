@@ -3,25 +3,8 @@ import { notFound } from "next/navigation";
 import { Package, Truck } from "lucide-react";
 
 import { getOrderByTrackingToken } from "@/app/pedido/actions";
-
-const STATUS: Record<string, { label: string; desc: string }> = {
-  pending_shipment: {
-    label: "En preparación",
-    desc: "Estamos armando tu pedido de hardware. Ya tenés acceso al software.",
-  },
-  shipped: {
-    label: "Despachado",
-    desc: "Tu pedido salió de nuestro depósito.",
-  },
-  delivered: {
-    label: "Entregado",
-    desc: "Pedido marcado como entregado.",
-  },
-  not_applicable: {
-    label: "Sin envío",
-    desc: "Este pedido no incluye hardware.",
-  },
-};
+import { CorreoArgentinoTrackingLinks } from "@/components/store/correo-argentino-tracking-links";
+import { OrderFulfillmentSteps } from "@/components/store/order-fulfillment-steps";
 
 type Props = {
   params: Promise<{ token: string }>;
@@ -32,7 +15,10 @@ export default async function PedidoTrackingPage({ params }: Props) {
   const order = await getOrderByTrackingToken(token);
   if (!order || !order.paid) notFound();
 
-  const st = STATUS[order.fulfillmentStatus] ?? { label: order.fulfillmentStatus, desc: "" };
+  const isHardware = order.fulfillmentStatus !== "not_applicable";
+  const showCorreoLink =
+    Boolean(order.trackingNumber) &&
+    (!order.trackingCarrier || /correo/i.test(order.trackingCarrier));
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-sky-50/90 via-zinc-50 to-emerald-50/70">
@@ -52,41 +38,61 @@ export default async function PedidoTrackingPage({ params }: Props) {
               <Package className="size-8 text-amber-600" />
             )}
             <div>
-              <h1 className="text-xl font-bold text-slate-900">Seguimiento de pedido</h1>
+              <h1 className="text-xl font-bold text-slate-900">Estado de tu pedido</h1>
               <p className="text-sm text-slate-600">{order.productName}</p>
             </div>
           </div>
 
-          <div className="mt-6 rounded-xl bg-sky-50 p-4">
-            <div className="text-sm font-semibold text-sky-900">{st.label}</div>
-            <p className="mt-1 text-sm text-slate-600">{st.desc}</p>
-          </div>
+          {isHardware ? (
+            <>
+              {order.fulfillmentStatus === "pending_shipment" ? (
+                <div className="mt-6 rounded-xl border border-amber-200/80 bg-amber-50/90 p-4">
+                  <p className="text-sm font-medium text-amber-950">
+                    Estamos preparando tu envío
+                  </p>
+                  <p className="mt-1 text-sm leading-relaxed text-amber-900/90">
+                    Tu combo está en preparación en nuestro depósito. Todavía no tiene número de Correo
+                    Argentino: te lo mandamos por mail en cuanto lo despachemos.
+                  </p>
+                </div>
+              ) : null}
 
-          <dl className="mt-6 space-y-3 text-sm">
+              <OrderFulfillmentSteps fulfillmentStatus={order.fulfillmentStatus} />
+            </>
+          ) : (
+            <div className="mt-6 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
+              Este pedido es solo software; no incluye envío físico.
+            </div>
+          )}
+
+          {order.trackingNumber ? (
+            <div className="mt-6 rounded-xl border border-sky-200 bg-sky-50/80 p-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-sky-800">
+                Seguimiento Correo Argentino
+              </div>
+              <div className="mt-2 font-mono text-lg font-semibold tracking-wide text-slate-900">
+                {order.trackingNumber}
+              </div>
+              {order.trackingCarrier ? (
+                <p className="mt-1 text-sm text-slate-600">{order.trackingCarrier}</p>
+              ) : null}
+              {order.shippedAt ? (
+                <p className="mt-1 text-xs text-slate-500">
+                  Despachado el {new Date(order.shippedAt).toLocaleDateString("es-AR")}
+                </p>
+              ) : null}
+              <CorreoArgentinoTrackingLinks
+                trackingNumber={order.trackingNumber}
+                show={showCorreoLink}
+              />
+            </div>
+          ) : null}
+
+          <dl className="mt-6 border-t border-slate-100 pt-4 text-sm">
             <div>
               <dt className="text-muted-foreground">Cliente</dt>
               <dd className="font-medium">{order.customerName}</dd>
             </div>
-            {order.trackingNumber ? (
-              <>
-                <div>
-                  <dt className="text-muted-foreground">Nº de seguimiento</dt>
-                  <dd className="font-mono font-medium">{order.trackingNumber}</dd>
-                </div>
-                {order.trackingCarrier ? (
-                  <div>
-                    <dt className="text-muted-foreground">Transportista</dt>
-                    <dd>{order.trackingCarrier}</dd>
-                  </div>
-                ) : null}
-                {order.shippedAt ? (
-                  <div>
-                    <dt className="text-muted-foreground">Fecha de despacho</dt>
-                    <dd>{new Date(order.shippedAt).toLocaleDateString("es-AR")}</dd>
-                  </div>
-                ) : null}
-              </>
-            ) : null}
           </dl>
 
           <p className="mt-8 text-center text-xs text-slate-500">

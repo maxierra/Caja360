@@ -206,24 +206,24 @@ function SettingsCard({
 }) {
   const s = SETTINGS_CARD_STYLES[accent];
   return (
-      <button
-        type="button"
-        onClick={onClick}
-        title={tooltip ?? description}
-        className={cn(
-          "group relative text-left",
-          "rounded-2xl border border-border/70 bg-card",
-          "shadow-md shadow-black/[0.04] dark:shadow-black/20",
-          "ring-1 ring-transparent transition-all duration-200",
-          "hover:-translate-y-1 hover:shadow-xl",
-          s.hoverBorder,
-          s.hoverShadow
-        )}
-      >
-      <div className="relative overflow-hidden rounded-2xl p-5">
+    <button
+      type="button"
+      onClick={onClick}
+      title={tooltip ?? description}
+      className={cn(
+        "group relative flex h-full min-h-[220px] flex-col text-left",
+        "rounded-2xl border border-border/70 bg-card",
+        "shadow-md shadow-black/[0.04] dark:shadow-black/20",
+        "ring-1 ring-transparent transition-all duration-200",
+        "hover:-translate-y-0.5 hover:shadow-lg",
+        s.hoverBorder,
+        s.hoverShadow
+      )}
+    >
+      <div className="relative flex flex-1 flex-col overflow-hidden rounded-2xl p-6 sm:p-7">
         <div
           className={cn(
-            "pointer-events-none absolute -right-6 -top-6 size-24 rounded-full opacity-0 blur-2xl transition-opacity duration-300 group-hover:opacity-100",
+            "pointer-events-none absolute -right-8 -top-8 size-32 rounded-full opacity-0 blur-2xl transition-opacity duration-300 group-hover:opacity-100",
             accent === "emerald" && "bg-emerald-400/25",
             accent === "sky" && "bg-sky-400/25",
             accent === "violet" && "bg-violet-400/25",
@@ -231,25 +231,23 @@ function SettingsCard({
             accent === "cyan" && "bg-cyan-400/25"
           )}
         />
-        <div className="relative flex gap-4">
-          <div
-            className={cn(
-              "flex size-12 shrink-0 items-center justify-center rounded-xl border border-white/20 shadow-inner dark:border-white/5",
-              s.iconWrap
-            )}
-          >
-            <Icon className={cn("size-6", s.icon)} />
-          </div>
-          <div className="min-w-0 flex-1 space-y-1.5">
-            <div className="font-semibold tracking-tight text-foreground">{title}</div>
-            <p className="text-xs text-muted-foreground">{description}</p>
-            <p className="text-[11px] font-medium text-muted-foreground/80">{hint}</p>
-          </div>
+        <div
+          className={cn(
+            "relative mb-5 flex size-12 items-center justify-center rounded-xl border border-white/20 shadow-inner dark:border-white/5",
+            s.iconWrap
+          )}
+        >
+          <Icon className={cn("size-6", s.icon)} />
         </div>
-        <div className="mt-4 flex items-center justify-between text-[11px] font-semibold text-muted-foreground/80 group-hover:text-foreground">
+        <div className="relative flex flex-1 flex-col gap-2">
+          <div className="text-base font-semibold leading-snug tracking-tight text-foreground">{title}</div>
+          <p className="text-sm leading-relaxed text-muted-foreground">{description}</p>
+          <p className="text-xs font-medium text-muted-foreground/80">{hint}</p>
+        </div>
+        <div className="relative mt-6 border-t border-border/50 pt-4 text-xs font-semibold text-muted-foreground/80 group-hover:text-foreground">
           <span className="inline-flex items-center gap-1">
             <span className="border-b border-transparent group-hover:border-current">Abrir sección</span>
-            <span className="ml-0.5 transition-transform group-hover:translate-x-0.5">→</span>
+            <span className="transition-transform group-hover:translate-x-0.5">→</span>
           </span>
         </div>
       </div>
@@ -280,7 +278,7 @@ export function SettingsClient({
 
   return (
     <>
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid auto-rows-fr gap-6 sm:grid-cols-2 xl:grid-cols-3 xl:gap-8">
         <SettingsCard
           accent="emerald"
           icon={Store}

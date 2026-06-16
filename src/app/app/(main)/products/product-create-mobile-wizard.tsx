@@ -117,12 +117,17 @@ export function ProductCreateMobileWizard({
           const tryLoad = async (select: string) => {
             return await supabase.from("preload_products").select(select).eq("ean", ean).limit(1).maybeSingle();
           };
-          const first = await tryLoad("ean,name,brand,price_real,price_offer,cat1,cat2,cat3");
-          const second = first.error
-            ? await tryLoad("ean,producto,brand,precio_real,precio_oferta,cat1,cat2,cat3")
-            : { data: null, error: null };
-          const data = (first.data ?? second.data) as Record<string, unknown> | null;
-          const error = first.error && second.error ? second.error : null;
+          const first = await tryLoad("ean,producto,brand,precioReal,precioOferta,cat1,cat2,cat3");
+          const second =
+            first.error && !first.data
+              ? await tryLoad("ean,producto,brand,precioreal,preciooferta,cat1,cat2,cat3")
+              : { data: null, error: null };
+          const third =
+            first.error && second.error && !second.data
+              ? await tryLoad("ean,name,brand,price_real,price_offer,cat1,cat2,cat3")
+              : { data: null, error: null };
+          const data = (first.data ?? second.data ?? third.data) as Record<string, unknown> | null;
+          const error = first.error && second.error && third.error ? third.error : null;
 
           if (error || !data) {
             setPreload(null);
@@ -131,8 +136,8 @@ export function ProductCreateMobileWizard({
           }
 
           const name = data.name ?? data.producto ?? "";
-          const priceReal = data.price_real ?? data.precio_real;
-          const priceOffer = data.price_offer ?? data.precio_oferta;
+          const priceReal = data.price_real ?? data.precio_real ?? data.precioreal ?? data.precioReal;
+          const priceOffer = data.price_offer ?? data.precio_oferta ?? data.preciooferta ?? data.precioOferta;
 
           setPreload({
             ean: String(data.ean),

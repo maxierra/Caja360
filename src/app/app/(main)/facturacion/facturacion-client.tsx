@@ -150,7 +150,7 @@ export function FacturacionClient({
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={10} className="px-3 py-12 text-center text-muted-foreground">
-                  No hay comprobantes{filt === "today" ? " hoy" : ""}.
+                  No hay comprobantes{filter === "today" ? " hoy" : ""}.
                 </td>
               </tr>
             ) : (

@@ -42,7 +42,7 @@ export function EnviosClient({ rows }: Props) {
       const res = await adminMarkOrderShipped({
         orderId,
         trackingNumber: d.tracking,
-        trackingCarrier: d.carrier,
+        trackingCarrier: d.carrier?.trim() || "Correo Argentino",
       });
       if ("error" in res) toast.error(res.error);
       else toast.success("Marcado como despachado — email enviado al cliente");
@@ -124,7 +124,7 @@ export function EnviosClient({ rows }: Props) {
                     {r.fulfillment_status === "pending_shipment" ? (
                       <div className="flex min-w-[220px] flex-col gap-2">
                         <Input
-                          placeholder="Nº seguimiento"
+                          placeholder="Nº Correo Argentino"
                           value={draft[r.id]?.tracking ?? ""}
                           onChange={(e) =>
                             setDraft((d) => ({
@@ -134,12 +134,15 @@ export function EnviosClient({ rows }: Props) {
                           }
                         />
                         <Input
-                          placeholder="Transportista (opcional)"
+                          placeholder="Correo Argentino"
                           value={draft[r.id]?.carrier ?? ""}
                           onChange={(e) =>
                             setDraft((d) => ({
                               ...d,
-                              [r.id]: { tracking: d[r.id]?.tracking ?? "", carrier: e.target.value },
+                              [r.id]: {
+                                tracking: d[r.id]?.tracking ?? "",
+                                carrier: e.target.value,
+                              },
                             }))
                           }
                         />

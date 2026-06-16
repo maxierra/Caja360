@@ -1,4 +1,8 @@
 import { getAppBaseUrl } from "@/lib/app-base-url";
+import {
+  CORREO_ARGENTINO_TRACKING_PORTAL,
+  correoArgentinoTrackingUrl,
+} from "@/lib/store-shipping";
 import { sendTransactionalEmail } from "@/lib/resend-server";
 
 export async function sendStoreWelcomeEmail(params: {
@@ -30,7 +34,10 @@ export async function sendStoreWelcomeEmail(params: {
   if (params.includesHardware) {
     lines.push(
       "",
-      "Tu pedido de hardware está en preparación. Podés seguir el envío acá:",
+      "Tu combo con hardware está en preparación para despacho.",
+      "Todavía no tiene número de Correo Argentino; te lo enviamos por mail cuando lo despachemos.",
+      "",
+      "Podés ver el estado de preparación acá:",
       trackingUrl
     );
   }
@@ -53,17 +60,22 @@ export async function sendStoreShippedEmail(params: {
   const lines = [
     `Hola ${params.customerName},`,
     "",
-    "Tu pedido de hardware fue despachado.",
+    "Tu pedido de hardware ya fue despachado.",
     "",
-    params.trackingCarrier
-      ? `Transportista: ${params.trackingCarrier}`
-      : "Transportista: (ver detalle en el enlace)",
+    `Transportista: ${params.trackingCarrier?.trim() || "Correo Argentino"}`,
     `Nº de seguimiento: ${params.trackingNumber}`,
     "",
-    `Seguimiento: ${trackingUrl}`,
-    "",
-    "— Equipo POS",
   ];
+
+  if (!params.trackingCarrier || /correo/i.test(params.trackingCarrier)) {
+    lines.push(
+      `Consultar envío (número precargado): ${correoArgentinoTrackingUrl(params.trackingNumber)}`,
+      `O pegalo en el formulario de Correo Argentino: ${CORREO_ARGENTINO_TRACKING_PORTAL}`,
+      ""
+    );
+  }
+
+  lines.push(`Ver detalle del pedido: ${trackingUrl}`, "", "— Equipo POS");
 
   await sendTransactionalEmail(params.to, "Tu pedido fue despachado", lines.join("\n"));
 }

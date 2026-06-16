@@ -18,6 +18,7 @@ create index if not exists business_suppliers_business_name_idx
 
 alter table public.business_suppliers enable row level security;
 
+drop policy if exists business_suppliers_all on public.business_suppliers;
 create policy business_suppliers_all on public.business_suppliers
 for all
 to authenticated
@@ -50,6 +51,7 @@ create index if not exists supplier_orders_supplier_idx
 
 alter table public.supplier_orders enable row level security;
 
+drop policy if exists supplier_orders_all on public.supplier_orders;
 create policy supplier_orders_all on public.supplier_orders
 for all
 to authenticated
@@ -71,6 +73,7 @@ create index if not exists supplier_order_items_order_idx
 
 alter table public.supplier_order_items enable row level security;
 
+drop policy if exists supplier_order_items_all on public.supplier_order_items;
 create policy supplier_order_items_all on public.supplier_order_items
 for all
 to authenticated

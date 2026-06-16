@@ -18,7 +18,7 @@ export default function RootLayout({
     <html
       lang="es"
       suppressHydrationWarning
-      className="h-full antialiased"
+      className="light h-full antialiased"
     >
       <body className="min-h-full flex flex-col">
         <Providers>{children}</Providers>

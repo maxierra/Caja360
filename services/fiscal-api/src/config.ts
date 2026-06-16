@@ -5,6 +5,7 @@ export const config = {
   apiKey: process.env.FISCAL_API_KEY ?? "",
   supabaseUrl: process.env.SUPABASE_URL ?? "",
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
+  afipSdkAccessToken: process.env.AFIP_SDK_ACCESS_TOKEN ?? "",
 };
 
 export function assertConfig() {

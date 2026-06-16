@@ -80,6 +80,33 @@ def is_weight_product(sale_unit: str | None) -> bool:
     return normalized not in {"", "UNIDAD", "UNIDADES", "UNIT", "UN"}
 
 
+MAX_PG_INT = 2_147_483_647
+
+
+def safe_unit_stock(stock_value: Decimal, barcode: str | None) -> int:
+    """SQLite legacy: some rows store stock as digits + barcode (e.g. 1007790150006306 = 100 u.)."""
+    raw = int(stock_value)
+    if 0 <= raw <= MAX_PG_INT:
+        return raw
+    if barcode:
+        digits = str(abs(raw))
+        bc = barcode.strip()
+        if bc and digits.endswith(bc):
+            prefix = digits[: -len(bc)]
+            if prefix.isdigit():
+                parsed = int(prefix)
+                if 0 <= parsed <= MAX_PG_INT:
+                    return parsed
+    return 0
+
+
+def safe_unit_threshold(value: Decimal) -> int:
+    raw = int(value)
+    if 0 <= raw <= MAX_PG_INT:
+        return raw
+    return 0
+
+
 def map_product(row: ProductRow, business_id: str) -> dict[str, object]:
     sold_by_weight = is_weight_product(row.sale_unit)
     stock_value = Decimal(str(row.stock or 0))
@@ -96,9 +123,9 @@ def map_product(row: ProductRow, business_id: str) -> dict[str, object]:
         "category": normalize_text(row.category),
         "price": str(to_decimal(row.price)),
         "cost": str(to_decimal(row.purchase_price)),
-        "stock": 0 if sold_by_weight else int(stock_value),
+        "stock": 0 if sold_by_weight else safe_unit_stock(stock_value, barcode),
         "stock_decimal": "0.000" if not sold_by_weight else f"{stock_value.quantize(Decimal('0.001'))}",
-        "low_stock_threshold": 0 if sold_by_weight else int(min_stock_value),
+        "low_stock_threshold": 0 if sold_by_weight else safe_unit_threshold(min_stock_value),
         "low_stock_threshold_decimal": (
             "0.000" if not sold_by_weight else f"{min_stock_value.quantize(Decimal('0.001'))}"
         ),
@@ -216,11 +243,15 @@ def split_new_vs_existing(mapped_rows: list[dict], existing_rows: list[dict]) ->
     return to_insert, skipped
 
 
-def insert_products(base_url: str, api_key: str, rows: list[dict]) -> list[dict]:
+def insert_products(base_url: str, api_key: str, rows: list[dict], batch_size: int = 100) -> list[dict]:
     if not rows:
         return []
     url = f"{base_url}/rest/v1/products"
-    return supabase_request(url, api_key, method="POST", body=rows)
+    inserted: list[dict] = []
+    for start in range(0, len(rows), batch_size):
+        chunk = rows[start : start + batch_size]
+        inserted.extend(supabase_request(url, api_key, method="POST", body=chunk))
+    return inserted
 
 
 def main() -> int:

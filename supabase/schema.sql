@@ -112,6 +112,20 @@ create index if not exists products_barcode_idx on public.products(business_id, 
 create index if not exists products_scale_code_idx on public.products(business_id, scale_code);
 create index if not exists products_sku_idx on public.products(business_id, sku);
 
+create table if not exists public.cash_registers (
+  id uuid primary key default gen_random_uuid(),
+  business_id uuid not null references public.businesses(id) on delete cascade,
+  opened_by uuid references auth.users(id),
+  opened_at timestamptz not null default now(),
+  shift_start_at time,
+  shift_end_at time,
+  closed_by uuid references auth.users(id),
+  closed_at timestamptz,
+  opening_amount numeric(12,2) not null default 0,
+  closing_amount numeric(12,2),
+  notes text
+);
+
 create table if not exists public.sales (
   id uuid primary key default gen_random_uuid(),
   business_id uuid not null references public.businesses(id) on delete cascade,
@@ -183,20 +197,6 @@ create table if not exists public.payments (
 );
 
 create index if not exists payments_business_created_idx on public.payments(business_id, created_at desc);
-
-create table if not exists public.cash_registers (
-  id uuid primary key default gen_random_uuid(),
-  business_id uuid not null references public.businesses(id) on delete cascade,
-  opened_by uuid references auth.users(id),
-  opened_at timestamptz not null default now(),
-  shift_start_at time,
-  shift_end_at time,
-  closed_by uuid references auth.users(id),
-  closed_at timestamptz,
-  opening_amount numeric(12,2) not null default 0,
-  closing_amount numeric(12,2),
-  notes text
-);
 
 create index if not exists cash_registers_business_opened_idx on public.cash_registers(business_id, opened_at desc);
 create index if not exists sales_cash_register_idx on public.sales(cash_register_id);
@@ -1167,8 +1167,26 @@ alter table public.profiles add column if not exists avatar text;
 
 alter table public.cash_registers add column if not exists shift_start_at time;
 alter table public.cash_registers add column if not exists shift_end_at time;
-alter table public.sales add column if not exists cash_register_id uuid references public.cash_registers(id) on delete set null;
 alter table public.cash_registers add column if not exists expected_totals jsonb;
 alter table public.cash_registers add column if not exists closing_totals jsonb;
 alter table public.cash_registers add column if not exists difference_totals jsonb;
-alter table public.cash_registers add column if not exists difference_totals jsonb;
+
+-- Permisos base (sin esto: "permission denied for table businesses" con RLS)
+grant usage on schema public to postgres, anon, authenticated, service_role;
+
+grant all on all tables in schema public to postgres, service_role;
+grant select, insert, update, delete on all tables in schema public to authenticated;
+grant select on all tables in schema public to anon;
+
+grant all on all sequences in schema public to postgres, authenticated, service_role;
+
+grant all on all routines in schema public to postgres, service_role;
+grant execute on all functions in schema public to authenticated, service_role;
+
+alter default privileges in schema public
+  grant select, insert, update, delete on tables to authenticated;
+alter default privileges in schema public
+  grant all on tables to service_role;
+alter default privileges in schema public
+  grant execute on functions to authenticated, service_role;
+

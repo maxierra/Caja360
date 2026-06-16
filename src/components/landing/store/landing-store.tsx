@@ -4,10 +4,11 @@ import * as React from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ImageIcon, Minus, Plus, ShoppingCart, X } from "lucide-react";
+import { ImageIcon, Minus, Plus, ShoppingCart, Truck, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { LandingContactFooter } from "@/components/landing/LandingContactFooter";
+import { LandingShippingTrackingBar } from "@/components/landing/LandingShippingTrackingBar";
 import { landingCtaPrimary } from "@/components/landing/landing-cta-classes";
 import { formatStorePrice } from "@/lib/store-products";
 import type { SerializedCatalogProduct } from "@/lib/store-catalog";
@@ -310,32 +311,42 @@ export function LandingStore({ products }: Props) {
 
   return (
     <div className="flex min-h-full flex-1 flex-col bg-slate-50 text-slate-900">
-      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
-          <div>
-            <p className="text-base font-bold tracking-tight text-slate-900">TIENDA360</p>
-            <p className="text-xs text-slate-500">Sistema de gestión · POS</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setCartOpen(true)}
-              className="relative rounded-lg border border-slate-200 p-2.5 hover:bg-slate-50"
-              aria-label={`Carrito, ${cartCount} productos`}
-            >
-              <ShoppingCart className="size-5" />
-              {cartCount > 0 ? (
-                <span className="absolute -right-1 -top-1 flex size-5 items-center justify-center rounded-full bg-sky-700 text-[10px] font-bold text-white">
-                  {cartCount}
-                </span>
-              ) : null}
-            </button>
-            <Link
-              href="/auth/login"
-              className="hidden rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium sm:inline-flex"
-            >
-              Ingresar
-            </Link>
+      <header className="sticky top-0 z-30 bg-white shadow-sm">
+        <LandingShippingTrackingBar />
+        <div className="border-b border-slate-200">
+          <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
+            <div>
+              <p className="text-base font-bold tracking-tight text-slate-900">TIENDA360</p>
+              <p className="text-xs text-slate-500">Sistema de gestión · POS</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/pedido"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-2 text-xs font-bold text-amber-950 sm:hidden"
+              >
+                <Truck className="size-3.5" aria-hidden />
+                Envíos
+              </Link>
+              <button
+                type="button"
+                onClick={() => setCartOpen(true)}
+                className="relative rounded-lg border border-slate-200 p-2.5 hover:bg-slate-50"
+                aria-label={`Carrito, ${cartCount} productos`}
+              >
+                <ShoppingCart className="size-5" />
+                {cartCount > 0 ? (
+                  <span className="absolute -right-1 -top-1 flex size-5 items-center justify-center rounded-full bg-sky-700 text-[10px] font-bold text-white">
+                    {cartCount}
+                  </span>
+                ) : null}
+              </button>
+              <Link
+                href="/auth/login"
+                className="hidden rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium sm:inline-flex"
+              >
+                Ingresar
+              </Link>
+            </div>
           </div>
         </div>
       </header>

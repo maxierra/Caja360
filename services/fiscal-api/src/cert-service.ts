@@ -111,8 +111,8 @@ export async function uploadCertificate(params: {
   const keyPem = await keyBlob.text();
   const privateKey = forge.pki.privateKeyFromPem(keyPem);
   const certPublicKey = cert.publicKey as forge.pki.rsa.PublicKey;
-  const test = forge.pki.rsa.encrypt("test", certPublicKey);
-  forge.pki.rsa.decrypt(test, privateKey);
+  const test = certPublicKey.encrypt("test", "RSAES-PKCS1-V1_5");
+  privateKey.decrypt(test, "RSAES-PKCS1-V1_5");
 
   const certBytes = Buffer.from(params.certPem, "utf8");
   const { error: uploadErr } = await supabaseAdmin.storage.from(FISCAL_CERTS_BUCKET).upload(paths.certPath, certBytes, {

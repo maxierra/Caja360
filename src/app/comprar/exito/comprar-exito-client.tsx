@@ -16,6 +16,8 @@ export function ComprarExitoClient({ orderId, mpStatus }: Props) {
     provisioned: boolean;
     email: string | null;
     status: string;
+    trackingToken: string | null;
+    includesHardware: boolean;
   } | null>(null);
 
   React.useEffect(() => {
@@ -31,6 +33,8 @@ export function ComprarExitoClient({ orderId, mpStatus }: Props) {
         provisioned: res.provisioned,
         email: res.email,
         status: res.status,
+        trackingToken: res.trackingToken,
+        includesHardware: res.includesHardware,
       });
       if (!res.provisioned && attempts < 30) {
         setTimeout(poll, 2000);
@@ -67,12 +71,22 @@ export function ComprarExitoClient({ orderId, mpStatus }: Props) {
             Enviamos tus credenciales a{" "}
             <strong>{state?.email ?? "tu email"}</strong>. Revisá también la carpeta de spam.
           </p>
-          <Link
-            href="/auth/login"
-            className="mt-6 inline-flex h-10 items-center justify-center rounded-xl bg-sky-700 px-6 text-sm font-semibold text-white"
-          >
-            Ingresar al sistema
-          </Link>
+          <div className="mt-6 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+            <Link
+              href="/auth/login"
+              className="inline-flex h-10 items-center justify-center rounded-xl bg-sky-700 px-6 text-sm font-semibold text-white"
+            >
+              Ingresar al sistema
+            </Link>
+            {state?.includesHardware && state.trackingToken ? (
+              <Link
+                href={`/pedido/${state.trackingToken}`}
+                className="inline-flex h-10 items-center justify-center rounded-xl border border-sky-200 bg-sky-50 px-6 text-sm font-semibold text-sky-900"
+              >
+                Ver estado del envío
+              </Link>
+            ) : null}
+          </div>
         </>
       ) : (
         <>

@@ -2,14 +2,18 @@ import { cookies } from "next/headers";
 
 import { createClient } from "@/lib/supabase/server";
 import { FacturacionClient } from "@/app/app/(main)/facturacion/facturacion-client";
-import { getFiscalVouchers, getPendingConsolidationSummary } from "@/app/app/(main)/facturacion/actions";
+import { getFiscalVouchers, getPendingConsolidationSummary, type PendingConsolidationRow } from "@/app/app/(main)/facturacion/actions";
 import type { FiscalVoucher } from "@/features/billing/types";
 
 export default async function FacturacionPage() {
   const businessId = (await cookies()).get("active_business_id")?.value;
   let fiscalActive = false;
   let vouchers: FiscalVoucher[] = [];
-  let consolidation = { billingMode: null as "per_sale" | "consolidated" | null, pending: [], byPeriod: {} as Record<string, number> };
+  let consolidation: {
+    billingMode: "per_sale" | "consolidated" | null;
+    pending: PendingConsolidationRow[];
+    byPeriod: Record<string, number>;
+  } = { billingMode: null, pending: [], byPeriod: {} };
 
   if (businessId) {
     const supabase = await createClient();

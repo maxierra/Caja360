@@ -59,6 +59,7 @@ create index if not exists business_customers_business_name_idx
 
 alter table public.business_customers enable row level security;
 
+drop policy if exists business_customers_all on public.business_customers;
 create policy business_customers_all on public.business_customers
 for all
 to authenticated
@@ -86,6 +87,7 @@ create index if not exists customer_account_payments_register_idx
 
 alter table public.customer_account_payments enable row level security;
 
+drop policy if exists customer_account_payments_all on public.customer_account_payments;
 create policy customer_account_payments_all on public.customer_account_payments
 for all
 to authenticated
