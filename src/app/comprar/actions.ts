@@ -35,16 +35,26 @@ export async function startStoreCheckout(
   }
 
   const email = input.email.trim().toLowerCase();
+  if (!email) {
+    return { error: "Ingresá tu email." };
+  }
   if (!email.includes("@")) {
     return { error: "Email inválido." };
   }
 
   const customerName = input.customerName.trim();
-  const businessName = input.businessName.trim();
-  const phone = input.phone.trim();
+  if (!customerName) {
+    return { error: "Ingresá tu nombre completo." };
+  }
 
-  if (!customerName || !businessName || !phone) {
-    return { error: "Completá todos los campos obligatorios." };
+  const phone = input.phone.trim();
+  if (!phone) {
+    return { error: "Ingresá tu teléfono o WhatsApp." };
+  }
+
+  const businessName = input.businessName.trim();
+  if (!businessName) {
+    return { error: "Ingresá el nombre de tu negocio." };
   }
 
   if (product.includes_hardware && customerName.split(/\s+/).filter(Boolean).length < 2) {
@@ -52,8 +62,17 @@ export async function startStoreCheckout(
   }
 
   if (product.includes_hardware) {
-    if (!input.shippingAddress?.trim() || !input.shippingCity?.trim() || !input.shippingProvince?.trim()) {
-      return { error: "Completá la dirección de envío." };
+    if (!input.shippingAddress?.trim()) {
+      return { error: "Ingresá la dirección de envío." };
+    }
+    if (!input.shippingCity?.trim()) {
+      return { error: "Ingresá la ciudad." };
+    }
+    if (!input.shippingProvince?.trim()) {
+      return { error: "Ingresá la provincia." };
+    }
+    if (!input.shippingPostalCode?.trim()) {
+      return { error: "Ingresá el código postal." };
     }
   }
 

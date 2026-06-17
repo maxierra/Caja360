@@ -35,18 +35,61 @@ export function ComprarForm({ product }: Props) {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    const email = form.email.trim();
     const customerName = form.customerName.trim();
+    const phone = form.phone.trim();
+    const businessName = form.businessName.trim();
+
+    if (!email) {
+      toast.error("Ingresá tu email.");
+      return;
+    }
+    if (!email.includes("@")) {
+      toast.error("Email inválido.");
+      return;
+    }
+    if (!customerName) {
+      toast.error("Ingresá tu nombre completo.");
+      return;
+    }
     if (product.includes_hardware && customerName.split(/\s+/).filter(Boolean).length < 2) {
       toast.error("Ingresá nombre y apellido completos para el envío.");
       return;
     }
+    if (!phone) {
+      toast.error("Ingresá tu teléfono o WhatsApp.");
+      return;
+    }
+    if (!businessName) {
+      toast.error("Ingresá el nombre de tu negocio.");
+      return;
+    }
+    if (product.includes_hardware) {
+      if (!form.shippingAddress.trim()) {
+        toast.error("Ingresá la dirección de envío.");
+        return;
+      }
+      if (!form.shippingCity.trim()) {
+        toast.error("Ingresá la ciudad.");
+        return;
+      }
+      if (!form.shippingProvince.trim()) {
+        toast.error("Ingresá la provincia.");
+        return;
+      }
+      if (!form.shippingPostalCode.trim()) {
+        toast.error("Ingresá el código postal.");
+        return;
+      }
+    }
+
     startTransition(async () => {
       const res = await startStoreCheckout({
         sku: product.sku,
-        email: form.email,
+        email,
         customerName,
-        phone: form.phone,
-        businessName: form.businessName,
+        phone,
+        businessName: businessName,
         businessType: form.businessType,
         shippingAddress: form.shippingAddress,
         shippingCity: form.shippingCity,
@@ -177,6 +220,7 @@ export function ComprarForm({ product }: Props) {
             <Label htmlFor="shippingPostalCode">Código postal</Label>
             <Input
               id="shippingPostalCode"
+              required
               value={form.shippingPostalCode}
               onChange={(e) => setForm((f) => ({ ...f, shippingPostalCode: e.target.value }))}
             />

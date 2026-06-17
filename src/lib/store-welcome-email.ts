@@ -3,7 +3,7 @@ import {
   CORREO_ARGENTINO_TRACKING_PORTAL,
   correoArgentinoTrackingUrl,
 } from "@/lib/store-shipping";
-import { sendTransactionalEmail } from "@/lib/resend-server";
+import { sendTransactionalEmail, type SendEmailResult } from "@/lib/resend-server";
 
 export async function sendStoreWelcomeEmail(params: {
   to: string;
@@ -12,7 +12,7 @@ export async function sendStoreWelcomeEmail(params: {
   password: string;
   trackingToken: string;
   includesHardware: boolean;
-}): Promise<void> {
+}): Promise<SendEmailResult> {
   const base = getAppBaseUrl();
   const loginUrl = `${base}/auth/login`;
   const trackingUrl = `${base}/pedido/${params.trackingToken}`;
@@ -44,7 +44,7 @@ export async function sendStoreWelcomeEmail(params: {
 
   lines.push("", "— Equipo POS");
 
-  await sendTransactionalEmail(params.to, "Tu acceso al POS ya está listo", lines.join("\n"));
+  return sendTransactionalEmail(params.to, "Tu acceso al POS ya está listo", lines.join("\n"));
 }
 
 export async function sendStoreShippedEmail(params: {

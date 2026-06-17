@@ -144,7 +144,7 @@ export async function provisionStoreOrderFromPayment(
   }
 
   if (!order.welcome_email_sent_at) {
-    await sendStoreWelcomeEmail({
+    const mail = await sendStoreWelcomeEmail({
       to: email,
       customerName: order.customer_name,
       businessName: order.business_name,
@@ -152,10 +152,14 @@ export async function provisionStoreOrderFromPayment(
       trackingToken: order.tracking_token,
       includesHardware,
     });
-    await admin
-      .from("store_orders")
-      .update({ welcome_email_sent_at: now, updated_at: now })
-      .eq("id", orderId);
+    if (mail.ok) {
+      await admin
+        .from("store_orders")
+        .update({ welcome_email_sent_at: now, updated_at: now })
+        .eq("id", orderId);
+    } else {
+      console.error("[store-provision] welcome email failed:", mail.error, "order:", orderId, "to:", email);
+    }
   }
 
   return { ok: true, alreadyProvisioned: false };
