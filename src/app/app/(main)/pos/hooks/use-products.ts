@@ -2,6 +2,43 @@
 
 import * as React from "react";
 
+function normalizeSearchText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function tokenizeSearchQuery(query: string): string[] {
+  return query
+    .trim()
+    .split(/\s+/)
+    .map((token) => normalizeSearchText(token))
+    .filter(Boolean);
+}
+
+function productSearchHaystack(product: PosProduct): string {
+  return normalizeSearchText(
+    [product.name, product.category, product.size, product.color, product.barcode, product.scale_code]
+      .filter(Boolean)
+      .join(" ")
+  );
+}
+
+function matchesProductSearch(product: PosProduct, tokens: string[], rawQuery: string): boolean {
+  if (tokens.length === 0) return true;
+
+  const digitsOnly = rawQuery.replace(/\s+/g, "").toLowerCase();
+  if (digitsOnly) {
+    const barcode = (product.barcode ?? "").replace(/\s+/g, "").toLowerCase();
+    const scaleCode = (product.scale_code ?? "").toLowerCase();
+    if (barcode === digitsOnly || scaleCode === digitsOnly) return true;
+  }
+
+  const haystack = productSearchHaystack(product);
+  return tokens.every((token) => haystack.includes(token));
+}
+
 export type PosProduct = {
   id: string;
   name: string;
@@ -23,7 +60,8 @@ export function useProducts(products: PosProduct[]) {
   const [selectedSize, setSelectedSizeState] = React.useState("all");
   const [visibleCount, setVisibleCount] = React.useState(48);
 
-  const normalizedQuery = query.trim().toLowerCase();
+  const searchTokens = React.useMemo(() => tokenizeSearchQuery(query), [query]);
+  const hasSearchQuery = searchTokens.length > 0;
   const categories = React.useMemo(() => {
     const unique = new Set<string>();
     for (const product of products) {
@@ -43,16 +81,8 @@ export function useProducts(products: PosProduct[]) {
   }, [products]);
 
   const filtered = React.useMemo(() => {
-    if (normalizedQuery) {
-      return products.filter((p) => {
-        const nameMatch = p.name.toLowerCase().includes(normalizedQuery);
-        const categoryMatch = (p.category ?? "").toLowerCase().includes(normalizedQuery);
-        const sizeMatch = (p.size ?? "").toLowerCase().includes(normalizedQuery);
-        const colorMatch = (p.color ?? "").toLowerCase().includes(normalizedQuery);
-        const barcodeMatch = (p.barcode ?? "").toLowerCase() === normalizedQuery;
-        const scaleCodeMatch = (p.scale_code ?? "").toLowerCase() === normalizedQuery;
-        return nameMatch || categoryMatch || sizeMatch || colorMatch || barcodeMatch || scaleCodeMatch;
-      });
+    if (hasSearchQuery) {
+      return products.filter((p) => matchesProductSearch(p, searchTokens, query));
     }
 
     const categoryFiltered =
@@ -64,7 +94,7 @@ export function useProducts(products: PosProduct[]) {
       ? categoryFiltered
       : categoryFiltered.filter((p) => String(p.size ?? "").trim() === selectedSize);
 
-  }, [products, normalizedQuery, selectedCategory, selectedSize]);
+  }, [products, hasSearchQuery, searchTokens, query, selectedCategory, selectedSize]);
 
   const visible = React.useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
 
@@ -89,20 +119,23 @@ export function useProducts(products: PosProduct[]) {
 
   const findByBarcodeOrName = React.useCallback(
     (q: string) => {
-      const trimmed = q.trim().toLowerCase();
+      const trimmed = q.trim();
       if (!trimmed) return null;
 
-      const digitsOnly = trimmed.replace(/\s+/g, "");
+      const tokens = tokenizeSearchQuery(trimmed);
+      if (tokens.length === 0) return null;
+
+      const digitsOnly = trimmed.replace(/\s+/g, "").toLowerCase();
 
       const byBarcode = products.find(
         (p) => (p.barcode ?? "").replace(/\s+/g, "").toLowerCase() === digitsOnly
       );
       if (byBarcode) return byBarcode;
 
-      const byScaleCode = products.find((p) => (p.scale_code ?? "").toLowerCase() === trimmed);
+      const byScaleCode = products.find((p) => (p.scale_code ?? "").toLowerCase() === trimmed.toLowerCase());
       if (byScaleCode) return byScaleCode;
 
-      const byName = products.find((p) => p.name.toLowerCase().includes(trimmed));
+      const byName = products.find((p) => matchesProductSearch(p, tokens, trimmed));
       return byName ?? null;
     },
     [products]

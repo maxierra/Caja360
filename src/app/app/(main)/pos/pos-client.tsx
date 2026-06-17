@@ -310,7 +310,7 @@ export function PosClient({
         }
       }
 
-      setQuery(q);
+      setQuery(raw.trim());
       toast.error("No se encontró el producto");
       return { ok: false };
     },
