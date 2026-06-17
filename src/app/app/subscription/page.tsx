@@ -2,11 +2,11 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import { Suspense } from "react";
 
-import { getAllPlansConfig } from "@/app/app/subscription/actions";
 import { SubscriptionClient } from "@/app/app/subscription/subscription-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/server";
 import { fetchSubscriptionWithAutoTrial } from "@/lib/supabase/ensure-subscription-trial";
+import { getStoreEnvPrice, getStoreEnvTitle } from "@/lib/store-products";
 
 /** Valores por defecto si no configurás env (transferencia / alias fijos de la tienda). */
 const DEFAULT_MANUAL_MP_ALIAS = "tienda360.mp";
@@ -27,9 +27,10 @@ function manualContactFromEnv() {
 export default async function SubscriptionPage() {
   const cookieStore = await cookies();
   const businessId = cookieStore.get("active_business_id")?.value;
-  const plans = await getAllPlansConfig();
   const manualContact = manualContactFromEnv();
   const mercadoPagoConfigured = Boolean((process.env.MERCADOPAGO_ACCESS_TOKEN ?? "").trim());
+  const lifetimePrice = getStoreEnvPrice("software_lifetime");
+  const lifetimeTitle = getStoreEnvTitle("software_lifetime");
 
   if (!businessId) {
     return (
@@ -76,7 +77,7 @@ export default async function SubscriptionPage() {
             </span>
           </h1>
           <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-            Gestioná tu prueba gratis, revisá el tiempo restante y activá el plan con pago seguro por Mercado Pago.
+            Gestioná tu prueba gratis y activá la licencia de por vida con un pago único por Mercado Pago.
           </p>
         </header>
 
@@ -91,7 +92,8 @@ export default async function SubscriptionPage() {
             <SubscriptionClient
               businessId={businessId}
               subscription={subscription}
-              plans={plans}
+              lifetimePrice={lifetimePrice}
+              lifetimeTitle={lifetimeTitle}
               loadError={subErrorMessage ?? null}
               mercadoPagoConfigured={mercadoPagoConfigured}
               manualContact={manualContact}

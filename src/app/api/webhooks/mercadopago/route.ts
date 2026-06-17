@@ -184,6 +184,103 @@ async function isStoreOrderReference(extRef: string): Promise<boolean> {
   }
 }
 
+async function processLifetimeUpgradeApproved(payment: MpPayment, paymentId: string): Promise<NextResponse> {
+  const businessId = String(payment.external_reference ?? "").trim();
+  if (!businessId || !/^[0-9a-f-]{36}$/i.test(businessId)) {
+    return NextResponse.json({ ok: true, ignored: "no_business_ref" });
+  }
+
+  let admin;
+  try {
+    admin = createAdminClient();
+  } catch {
+    return NextResponse.json({ ok: false, error: "no_admin_client" }, { status: 503 });
+  }
+
+  const providerPaymentId = String(payment.id ?? paymentId);
+
+  const { data: existingPay } = await admin
+    .from("payments")
+    .select("id")
+    .eq("provider", "mercadopago")
+    .eq("provider_payment_id", providerPaymentId)
+    .maybeSingle();
+
+  if (existingPay) {
+    return NextResponse.json({ ok: true, duplicate: true });
+  }
+
+  const now = new Date();
+
+  const { data: subRow } = await admin.from("subscriptions").select("id, plan_id, status").eq("business_id", businessId).maybeSingle();
+  const subscriptionId = subRow?.id as string | undefined;
+
+  if (subRow && (subRow as { plan_id?: string; status?: string }).plan_id === "lifetime" && (subRow as { status?: string }).status === "active") {
+    const { error: payErr } = await admin.from("payments").insert({
+      business_id: businessId,
+      subscription_id: subscriptionId ?? null,
+      provider: "mercadopago",
+      provider_payment_id: providerPaymentId,
+      amount: Number(payment.transaction_amount ?? 0),
+      currency: String(payment.currency_id ?? "ARS"),
+      status: "approved",
+      raw: payment as unknown as Record<string, unknown>,
+    });
+    if (payErr) {
+      console.warn("[mp-webhook] lifetime duplicate payment insert", payErr.message);
+    }
+    return NextResponse.json({ ok: true, already_lifetime: true });
+  }
+
+  const { error: payErr } = await admin.from("payments").insert({
+    business_id: businessId,
+    subscription_id: subscriptionId ?? null,
+    provider: "mercadopago",
+    provider_payment_id: providerPaymentId,
+    amount: Number(payment.transaction_amount ?? 0),
+    currency: String(payment.currency_id ?? "ARS"),
+    status: "approved",
+    raw: payment as unknown as Record<string, unknown>,
+  });
+
+  if (payErr) {
+    console.error("payments insert (lifetime)", payErr);
+    return NextResponse.json({ ok: false }, { status: 500 });
+  }
+
+  const { error: subErr } = await admin.from("subscriptions").upsert(
+    {
+      business_id: businessId,
+      plan_id: "lifetime",
+      status: "active",
+      current_period_start: now.toISOString(),
+      current_period_end: null,
+      provider: "mercadopago",
+      updated_at: now.toISOString(),
+    },
+    { onConflict: "business_id" }
+  );
+
+  if (subErr) {
+    console.error("subscriptions upsert (lifetime)", subErr);
+    return NextResponse.json({ ok: false }, { status: 500 });
+  }
+
+  const { data: bizRow } = await admin.from("businesses").select("name").eq("id", businessId).maybeSingle();
+  const businessName = String((bizRow as { name?: string } | null)?.name ?? "Sin nombre");
+  void notifyAdminSubscriptionPayment({
+    businessId,
+    businessName,
+    amount: Number(payment.transaction_amount ?? 0),
+    currency: String(payment.currency_id ?? "ARS"),
+    mpPaymentId: providerPaymentId,
+  });
+
+  revalidatePath("/app/subscription");
+
+  return NextResponse.json({ ok: true, lifetime: true });
+}
+
 async function processSubscriptionApproved(payment: MpPayment, paymentId: string): Promise<NextResponse> {
   const businessId = String(payment.external_reference ?? "").trim();
   if (!businessId || !/^[0-9a-f-]{36}$/i.test(businessId)) {
@@ -385,6 +482,11 @@ async function processPaymentNotification(paymentId: string): Promise<NextRespon
 
   if (await isStoreOrderReference(extRef)) {
     return processStoreOrderApproved(payment, paymentId);
+  }
+
+  const meta = payment.metadata as Record<string, unknown> | undefined;
+  if (meta?.upgrade_type === "lifetime") {
+    return processLifetimeUpgradeApproved(payment, paymentId);
   }
 
   return processSubscriptionApproved(payment, paymentId);

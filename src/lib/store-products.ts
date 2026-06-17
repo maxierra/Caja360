@@ -135,6 +135,18 @@ export function getStoreEnvPrice(sku: string): number {
   return resolveStorePrice(sku, DEFAULT_PRICES[sku as keyof typeof DEFAULT_PRICES] ?? 0);
 }
 
+export function getStoreEnvTitle(sku: string): string {
+  if (sku === "software_lifetime") {
+    const t = (process.env.STORE_SOFTWARE_LIFETIME_TITLE ?? "").trim();
+    return t || "Software POS — Licencia de por vida";
+  }
+  if (sku === "combo_essential") {
+    const t = (process.env.STORE_COMBO_ESSENTIAL_TITLE ?? "").trim();
+    return t || "Combo Punto de Venta";
+  }
+  return STORE_DISPLAY_NAMES[sku] ?? sku;
+}
+
 export function formatStorePrice(amount: number): string {
   return new Intl.NumberFormat("es-AR", {
     style: "currency",

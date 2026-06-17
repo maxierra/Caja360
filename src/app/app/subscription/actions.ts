@@ -13,6 +13,7 @@ import { MercadoPagoConfig, Preference } from "mercadopago";
 import { getAppBaseUrl } from "@/lib/app-base-url";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { getStoreEnvPrice, getStoreEnvTitle } from "@/lib/store-products";
 import {
   discountedPlanAmount,
   normalizeSubscriptionPromoCode,
@@ -389,5 +390,102 @@ export async function startMercadoPagoCheckout(
     };
   }
 
+}
+
+export async function startLifetimeUpgradeCheckout(): Promise<{ checkoutUrl: string } | { error: string }> {
+  const token = (process.env.MERCADOPAGO_ACCESS_TOKEN ?? "").trim();
+  if (!token) {
+    return { error: "Falta MERCADOPAGO_ACCESS_TOKEN en el servidor." };
+  }
+
+  const cookieStore = await cookies();
+  const businessId = cookieStore.get("active_business_id")?.value;
+  if (!businessId) {
+    return { error: "No hay negocio activo." };
+  }
+
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) {
+    return { error: "Sesión inválida." };
+  }
+
+  const { data: membership, error: memErr } = await supabase
+    .from("memberships")
+    .select("business_id")
+    .eq("business_id", businessId)
+    .eq("user_id", userData.user.id)
+    .maybeSingle();
+
+  if (memErr || !membership) {
+    return { error: "No tenés acceso a este negocio." };
+  }
+
+  const amount = getStoreEnvPrice("software_lifetime");
+  const title = getStoreEnvTitle("software_lifetime");
+  const currency = (process.env.MERCADOPAGO_PLAN_CURRENCY ?? "ARS").trim().toUpperCase();
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { error: "Precio de licencia inválido." };
+  }
+
+  const base = getAppBaseUrl();
+  const notificationUrl = `${base}/api/webhooks/mercadopago`;
+
+  const client = new MercadoPagoConfig({ accessToken: token });
+  const preference = new Preference(client);
+
+  const metadata: Record<string, string> = {
+    business_id: businessId,
+    upgrade_type: "lifetime",
+    product_sku: "software_lifetime",
+    final_price: String(amount),
+  };
+
+  const body = {
+    items: [
+      {
+        id: "software_lifetime",
+        title,
+        quantity: 1,
+        currency_id: currency,
+        unit_price: amount,
+      },
+    ],
+    external_reference: businessId,
+    metadata,
+    notification_url: notificationUrl,
+    back_urls: {
+      success: `${base}/app/subscription?mp=success`,
+      pending: `${base}/app/subscription?mp=pending`,
+      failure: `${base}/app/subscription?mp=failure`,
+    },
+    auto_return: "approved" as const,
+  };
+
+  try {
+    const res = await preference.create({ body });
+    const useSandbox = process.env.MERCADOPAGO_USE_SANDBOX === "1";
+    const checkoutUrl = useSandbox ? res.sandbox_init_point : res.init_point;
+
+    if (!checkoutUrl) {
+      return { error: "Mercado Pago no devolvió URL de pago." };
+    }
+
+    return { checkoutUrl };
+  } catch (e) {
+    console.error("[mercadopago] lifetime preference.create failed:", e);
+
+    const msg =
+      e instanceof Error
+        ? e.message
+        : typeof e === "object" && e !== null && "message" in e && typeof (e as { message: unknown }).message === "string"
+          ? (e as { message: string }).message
+          : String(e);
+
+    return {
+      error: msg && msg !== "[object Object]" ? msg : "Error al crear el checkout.",
+    };
+  }
 }
 

@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { LandingContactFooter } from "@/components/landing/LandingContactFooter";
 import { LandingShippingTrackingBar } from "@/components/landing/LandingShippingTrackingBar";
 import { landingCtaPrimary } from "@/components/landing/landing-cta-classes";
+import { TrialExplainerModal } from "@/components/landing/trial-explainer-modal";
 import { formatStorePrice } from "@/lib/store-products";
 import type { SerializedCatalogProduct } from "@/lib/store-catalog";
 import { cn } from "@/lib/utils";
@@ -22,6 +23,8 @@ type CartLine = {
 
 type Props = {
   products: SerializedCatalogProduct[];
+  signupEnabled: boolean;
+  lifetimePrice: number;
 };
 
 function ProductImage({
@@ -276,9 +279,10 @@ function CartDrawer({
   );
 }
 
-export function LandingStore({ products }: Props) {
+export function LandingStore({ products, signupEnabled, lifetimePrice }: Props) {
   const [cartOpen, setCartOpen] = React.useState(false);
   const [detailSku, setDetailSku] = React.useState<string | null>(null);
+  const [trialOpen, setTrialOpen] = React.useState(false);
   const [lines, setLines] = React.useState<CartLine[]>([]);
 
   const detailProduct = products.find((p) => p.sku === detailSku) ?? null;
@@ -340,6 +344,18 @@ export function LandingStore({ products }: Props) {
                   </span>
                 ) : null}
               </button>
+              {signupEnabled ? (
+                <button
+                  type="button"
+                  onClick={() => setTrialOpen(true)}
+                  className={cn(
+                    landingCtaPrimary,
+                    "hidden rounded-lg px-3 py-2 text-sm font-bold sm:inline-flex"
+                  )}
+                >
+                  Probar ahora
+                </button>
+              ) : null}
               <Link
                 href="/auth/login"
                 className="hidden rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium sm:inline-flex"
@@ -357,6 +373,15 @@ export function LandingStore({ products }: Props) {
           <p className="mx-auto mt-2 max-w-xl text-sm text-slate-600">
             Solo el software o el combo con lector e impresora. Tocá «Ver qué incluye» para conocer todos los beneficios.
           </p>
+          {signupEnabled ? (
+            <button
+              type="button"
+              onClick={() => setTrialOpen(true)}
+              className={cn(landingCtaPrimary, "mt-4 inline-flex rounded-lg px-5 py-2.5 text-sm font-bold")}
+            >
+              Probar ahora — 7 días gratis
+            </button>
+          ) : null}
         </section>
 
         <section id="tienda" className="mx-auto grid max-w-4xl gap-8 sm:grid-cols-2">
@@ -418,6 +443,8 @@ export function LandingStore({ products }: Props) {
         onUpdateQty={updateQty}
         onRemove={removeLine}
       />
+
+      <TrialExplainerModal open={trialOpen} onClose={() => setTrialOpen(false)} lifetimePrice={lifetimePrice} />
     </div>
   );
 }
