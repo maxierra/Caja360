@@ -9,7 +9,7 @@ import { toast } from "sonner";
 
 import { LandingContactFooter } from "@/components/landing/LandingContactFooter";
 import { LandingShippingTrackingBar } from "@/components/landing/LandingShippingTrackingBar";
-import { landingCtaPrimary } from "@/components/landing/landing-cta-classes";
+import { landingCtaPrimary, landingCtaSecondary } from "@/components/landing/landing-cta-classes";
 import { TrialExplainerModal } from "@/components/landing/trial-explainer-modal";
 import { formatStorePrice } from "@/lib/store-products";
 import type { SerializedCatalogProduct } from "@/lib/store-catalog";
@@ -348,10 +348,7 @@ export function LandingStore({ products, signupEnabled, lifetimePrice }: Props) 
                 <button
                   type="button"
                   onClick={() => setTrialOpen(true)}
-                  className={cn(
-                    landingCtaPrimary,
-                    "hidden rounded-lg px-3 py-2 text-sm font-bold sm:inline-flex"
-                  )}
+                  className={cn(landingCtaSecondary, "hidden sm:inline-flex")}
                 >
                   Probar ahora
                 </button>

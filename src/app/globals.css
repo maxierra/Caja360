@@ -263,7 +263,8 @@
   }
 }
 
-a.landing-cta-primary {
+a.landing-cta-primary,
+button.landing-cta-primary {
   position: relative;
   overflow: hidden;
   isolation: isolate;
@@ -292,19 +293,24 @@ a.landing-cta-primary {
 
 a.landing-cta-primary:visited,
 a.landing-cta-primary:hover,
-a.landing-cta-primary:active {
+a.landing-cta-primary:active,
+button.landing-cta-primary:hover,
+button.landing-cta-primary:active {
   color: #fff !important;
 }
 
-a.landing-cta-primary:hover {
+a.landing-cta-primary:hover,
+button.landing-cta-primary:hover {
   transform: scale(1.03);
 }
 
-a.landing-cta-primary:active {
+a.landing-cta-primary:active,
+button.landing-cta-primary:active {
   transform: scale(0.98);
 }
 
-a.landing-cta-primary::before {
+a.landing-cta-primary::before,
+button.landing-cta-primary::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -320,19 +326,22 @@ a.landing-cta-primary::before {
   pointer-events: none;
 }
 
-a.landing-cta-primary > * {
+a.landing-cta-primary > *,
+button.landing-cta-primary > * {
   position: relative;
   z-index: 1;
   color: inherit !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  a.landing-cta-primary {
+  a.landing-cta-primary,
+  button.landing-cta-primary {
     animation: none;
     background-size: 100% 100% !important;
     filter: none;
   }
-  a.landing-cta-primary::before {
+  a.landing-cta-primary::before,
+  button.landing-cta-primary::before {
     animation: none;
     opacity: 0;
   }
